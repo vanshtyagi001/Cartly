@@ -167,13 +167,6 @@ export default function Navbar() {
         >
           Your Orders
         </Link>
-
-        <Link 
-          to="/seller" 
-          className="text-[11px] uppercase tracking-[0.2em] font-medium text-stone-500 hover:text-stone-900 transition-colors"
-        >
-          {user?.isSeller ? "Seller Studio" : "Sell on Cartly"}
-        </Link>
       </div>
 
       {/* Right: User Account & Cart Icon */}
@@ -234,7 +227,7 @@ export default function Navbar() {
                   className="flex items-center justify-between px-5 py-2 text-xs text-stone-600 hover:text-stone-900 hover:bg-stone-50 transition-colors"
                 >
                   <span className="uppercase tracking-widest text-[10px]">
-                    {user?.isSeller ? "Seller Studio" : "Become a Seller"}
+                    {user?.isSeller ? "Seller Studio" : "Sell on Cartly"}
                   </span>
                   <svg className="w-3.5 h-3.5 text-stone-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5l7 7-7 7" />

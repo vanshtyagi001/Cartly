@@ -107,6 +107,7 @@ export default function Footer() {
             <h4 className="text-[9px] uppercase tracking-[0.25em] text-stone-600 font-semibold mb-2">Explore</h4>
             <Link to="/shop?category=Stationery" className="text-sm font-sans tracking-wide text-stone-300 hover:text-white transition-colors duration-300">Stationery</Link>
             <Link to="/shop?category=Trekking%20Essentials" className="text-sm font-sans tracking-wide text-stone-300 hover:text-white transition-colors duration-300">Trekking Essentials</Link>
+            <Link to="/seller" className="text-sm font-sans tracking-wide text-amber-200/90 hover:text-white transition-colors duration-300">Sell on Cartly</Link>
             <Link to="/about" className="text-sm font-sans tracking-wide text-stone-300 hover:text-white transition-colors duration-300">About Cartly</Link>
           </div>
 
