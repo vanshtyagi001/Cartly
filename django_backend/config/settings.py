@@ -1,6 +1,8 @@
 import os
 from pathlib import Path
+
 from dotenv import load_dotenv
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 env_file = os.environ.get("DJANGO_ENV_FILE", str(BASE_DIR / ".env"))
@@ -22,6 +24,7 @@ INSTALLED_APPS = [
     "accounts",
     "orders",
     "sellers",
+    "administration",
 ]
 
 MIDDLEWARE = [
@@ -33,6 +36,7 @@ ROOT_URLCONF = "config.urls"
 TEMPLATES = []
 WSGI_APPLICATION = "config.wsgi.application"
 
+# Django requires a database setting, but product data remains in MongoDB.
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
@@ -44,5 +48,31 @@ LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"
 USE_I18N = True
 USE_TZ = True
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-CORS_ALLOW_ALL_ORIGINS = True
+MONGO_URI = os.environ.get("MONGO_URI", "")
+MONGO_DATABASE = os.environ.get("MONGO_DATABASE", "")
+MONGO_COLLECTION = os.environ.get("MONGO_COLLECTION", "products")
+
+CORS_ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get(
+        "CORS_ALLOWED_ORIGINS",
+        "http://localhost:5173,https://equipu.vercel.app",
+    ).split(",")
+    if origin.strip()
+]
+
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.AllowAny",
+    ],
+    "UNAUTHENTICATED_USER": None,
+    "DEFAULT_RENDERER_CLASSES": [
+        "rest_framework.renderers.JSONRenderer",
+    ],
+    "DEFAULT_PARSER_CLASSES": [
+        "rest_framework.parsers.JSONParser",
+    ],
+}
