@@ -114,11 +114,22 @@ export default function Product() {
               {product.description || "High-quality, durable campus essential designed to make your daily routine smoother. Built for students, curated by Cartly to ensure form seamlessly meets function."}
             </p>
 
-            {/* Campus Seller Details */}
-            <div className="mb-10 p-5 bg-[#FAF9F6] border border-stone-200 max-w-md">
-              <span className="text-[9px] uppercase tracking-widest text-stone-400 font-semibold block mb-2">
-                Campus Seller
-              </span>
+            {/* Campus Seller Details & Stock Status */}
+            <div className="mb-8 p-5 bg-[#FAF9F6] border border-stone-200 max-w-md">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[9px] uppercase tracking-widest text-stone-400 font-semibold block">
+                  Campus Seller
+                </span>
+                <span className={`text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 ${
+                  (product.stock !== undefined ? product.stock : 25) > 0
+                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                    : 'bg-red-50 text-red-800 border border-red-200'
+                }`}>
+                  {(product.stock !== undefined ? product.stock : 25) > 0
+                    ? `${product.stock !== undefined ? product.stock : 25} in stock`
+                    : 'Sold Out'}
+                </span>
+              </div>
               <div>
                 <p className="font-serif text-stone-900 text-base font-medium">
                   {product.sellerName || "Cartly Campus Hub"}
@@ -130,34 +141,47 @@ export default function Product() {
             </div>
 
             {/* Quantity Selector */}
-            <div className="mb-12">
-              <span className="block text-[9px] font-semibold text-stone-400 uppercase tracking-[0.2em] mb-4">
-                Quantity
-              </span>
-              <div className="flex items-center border border-stone-300 w-fit">
-                <button 
-                  onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                  className="w-12 h-12 flex items-center justify-center text-stone-500 hover:bg-stone-50 hover:text-stone-900 transition-colors"
-                >
-                  <span className="text-lg leading-none mb-1">-</span>
-                </button>
-                <span className="w-12 text-center text-sm font-medium text-stone-900">{quantity}</span>
-                <button 
-                  onClick={() => setQuantity(quantity + 1)}
-                  className="w-12 h-12 flex items-center justify-center text-stone-500 hover:bg-stone-50 hover:text-stone-900 transition-colors"
-                >
-                  <span className="text-lg leading-none mb-0.5">+</span>
-                </button>
+            {((product.stock !== undefined ? product.stock : 25) > 0) ? (
+              <div className="mb-12">
+                <div className="flex items-center justify-between max-w-[200px] mb-4">
+                  <span className="block text-[9px] font-semibold text-stone-400 uppercase tracking-[0.2em]">
+                    Quantity
+                  </span>
+                  <span className="text-[10px] text-stone-500">
+                    Max: {product.stock !== undefined ? product.stock : 25}
+                  </span>
+                </div>
+                <div className="flex items-center border border-stone-300 w-fit">
+                  <button 
+                    onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                    className="w-12 h-12 flex items-center justify-center text-stone-500 hover:bg-stone-50 hover:text-stone-900 transition-colors"
+                  >
+                    <span className="text-lg leading-none mb-1">-</span>
+                  </button>
+                  <span className="w-12 text-center text-sm font-medium text-stone-900">{quantity}</span>
+                  <button 
+                    onClick={() => setQuantity(Math.min((product.stock !== undefined ? product.stock : 25), quantity + 1))}
+                    className="w-12 h-12 flex items-center justify-center text-stone-500 hover:bg-stone-50 hover:text-stone-900 transition-colors disabled:opacity-40"
+                    disabled={quantity >= (product.stock !== undefined ? product.stock : 25)}
+                  >
+                    <span className="text-lg leading-none mb-0.5">+</span>
+                  </button>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="mb-12 p-4 bg-stone-100 border border-stone-200 text-stone-600 text-xs font-serif italic max-w-md">
+                This item is currently out of stock. Check back soon or contact the campus seller.
+              </div>
+            )}
 
             {/* Action Buttons */}
             <div className="flex flex-col sm:flex-row gap-4 mt-auto">
               <button 
                 onClick={handleAddToCart}
-                className="flex-1 bg-stone-900 text-white py-4 px-8 text-[10px] uppercase tracking-[0.2em] font-medium hover:bg-black transition-colors duration-300"
+                disabled={(product.stock !== undefined ? product.stock : 25) <= 0}
+                className="flex-1 bg-stone-900 text-white py-4 px-8 text-[10px] uppercase tracking-[0.2em] font-medium hover:bg-black transition-colors duration-300 disabled:opacity-40 disabled:hover:bg-stone-900"
               >
-                Add to Cart
+                {(product.stock !== undefined ? product.stock : 25) > 0 ? 'Add to Cart' : 'Out of Stock'}
               </button>
               <button 
                 onClick={() => setIsCartOpen(true)}

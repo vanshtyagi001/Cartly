@@ -53,6 +53,17 @@ def json_safe(value):
 
 
 def format_product(product):
+    stock = product.get("stock")
+    if stock is None:
+        stock = 25  # Sensible campus default if unstated
+
+    try:
+        stock = max(0, int(stock))
+    except (ValueError, TypeError):
+        stock = 0
+
+    in_stock = bool(product.get("inStock", True)) and (stock > 0)
+
     return {
         "id": product["productId"],
         "name": product["name"],
@@ -60,9 +71,10 @@ def format_product(product):
         "price": f"₹{product['price']}",
         "rawPrice": product.get("price", 0),
         "img": product["img"],
+        "stock": stock,
         "sellerId": product.get("sellerId"),
         "sellerName": product.get("sellerName", "Cartly Campus Hub"),
         "sellerLocation": product.get("sellerLocation", "Central Campus Store"),
         "description": product.get("description", "Verified campus student essential."),
-        "inStock": product.get("inStock", True),
+        "inStock": in_stock,
     }

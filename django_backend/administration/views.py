@@ -207,6 +207,12 @@ class AdminProductsView(APIView):
         except (ValueError, TypeError):
             price = 0.0
 
+        try:
+            raw_stock = data.get("stock", 25)
+            stock = max(0, int(raw_stock)) if raw_stock is not None else 25
+        except (ValueError, TypeError):
+            stock = 25
+
         if not name or price <= 0:
             return Response({"error": "Product name and price are required."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -223,17 +229,64 @@ class AdminProductsView(APIView):
             "name": name,
             "category": category,
             "price": price,
+            "stock": stock,
             "img": img,
             "description": description or "Official Cartly Campus Catalog Essential.",
             "sellerName": "Cartly Official Hub",
             "sellerLocation": "Central Store",
-            "inStock": True,
+            "inStock": stock > 0,
             "createdAt": now,
             "updatedAt": now,
         }
 
         products_col.insert_one(new_prod)
         return Response({"message": f"'{name}' added to catalog.", "product": format_product(new_prod)}, status=status.HTTP_201_CREATED)
+
+    def put(self, request, product_id):
+        is_ok, res = check_is_admin(request)
+        if not is_ok:
+            return res
+
+        products_col = get_products_collection()
+        prod = products_col.find_one({"productId": product_id})
+        if not prod:
+            return Response({"error": "Product not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        data = request.data or {}
+        now = datetime.now(timezone.utc)
+        update_fields = {"updatedAt": now}
+
+        if "name" in data and str(data["name"]).strip():
+            update_fields["name"] = str(data["name"]).strip()
+        if "category" in data and str(data["category"]).strip():
+            update_fields["category"] = str(data["category"]).strip()
+        if "price" in data:
+            raw = str(data["price"])
+            cleaned = "".join(ch for ch in raw if ch.isdigit() or ch in ".-")
+            update_fields["price"] = float(cleaned) if cleaned else prod.get("price", 0)
+        if "stock" in data:
+            try:
+                new_stock = max(0, int(data["stock"]))
+                update_fields["stock"] = new_stock
+                update_fields["inStock"] = (new_stock > 0)
+            except (ValueError, TypeError):
+                pass
+        if "img" in data and str(data["img"]).strip():
+            update_fields["img"] = str(data["img"]).strip()
+        if "description" in data:
+            update_fields["description"] = str(data["description"]).strip()
+        if "inStock" in data:
+            update_fields["inStock"] = bool(data["inStock"])
+
+        products_col.update_one({"_id": prod["_id"]}, {"$set": update_fields})
+        updated = products_col.find_one({"_id": prod["_id"]})
+        return Response(
+            {
+                "message": f"Product #{product_id} updated successfully.",
+                "product": format_product(updated),
+            },
+            status=status.HTTP_200_OK,
+        )
 
     def delete(self, request, product_id):
         is_ok, res = check_is_admin(request)

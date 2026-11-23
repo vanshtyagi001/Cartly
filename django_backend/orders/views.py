@@ -5,6 +5,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.auth import get_user_from_request
+from products.repository import get_collection as get_products_collection
 from .repository import get_orders_collection
 from .serializers import format_order, generate_order_id
 
@@ -75,26 +76,58 @@ class OrderListCreateView(APIView):
         # Calculate totals
         subtotal = 0.0
         sanitized_items = []
-        for item in items:
-            raw_price = item.get("price", 0)
-            if isinstance(raw_price, str):
-                cleaned_price = "".join(ch for ch in raw_price if ch.isdigit() or ch in ".-")
-                price = float(cleaned_price) if cleaned_price else 0.0
-            else:
-                price = float(raw_price)
+        products_col = get_products_collection()
 
-            qty = int(item.get("quantity", 1))
+        # Validate stock availability before confirming order
+        for item in items:
+            raw_id = item.get("id") or item.get("productId")
+            qty = max(1, int(item.get("quantity", 1)))
+            
+            # Match product in DB by integer productId or string ID
+            prod_query = {}
+            if isinstance(raw_id, int) or (isinstance(raw_id, str) and raw_id.isdigit()):
+                prod_query = {"productId": int(raw_id)}
+            elif ObjectId.is_valid(str(raw_id)):
+                prod_query = {"_id": ObjectId(str(raw_id))}
+
+            db_prod = products_col.find_one(prod_query) if prod_query else None
+            current_stock = db_prod.get("stock", 25) if db_prod else 25
+            try:
+                current_stock = int(current_stock)
+            except (ValueError, TypeError):
+                current_stock = 0
+
+            if db_prod and current_stock < qty:
+                return Response(
+                    {
+                        "error": f"Insufficient stock for '{db_prod.get('name', 'Product')}'. Only {current_stock} item(s) left in stock.",
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Determine price (from db or request)
+            if db_prod and db_prod.get("price") is not None:
+                price = float(db_prod["price"])
+            else:
+                raw_price = item.get("price", 0)
+                if isinstance(raw_price, str):
+                    cleaned_price = "".join(ch for ch in raw_price if ch.isdigit() or ch in ".-")
+                    price = float(cleaned_price) if cleaned_price else 0.0
+                else:
+                    price = float(raw_price)
+
             subtotal += price * qty
 
             sanitized_items.append(
                 {
-                    "id": item.get("id"),
-                    "name": item.get("name"),
-                    "category": item.get("category", "Essentials"),
+                    "id": item.get("id") or (db_prod.get("productId") if db_prod else None),
+                    "name": db_prod.get("name") if db_prod else item.get("name"),
+                    "category": db_prod.get("category") if db_prod else item.get("category", "Essentials"),
                     "price": f"₹{price:,.2f}",
                     "rawPrice": price,
                     "quantity": qty,
-                    "img": item.get("img", ""),
+                    "img": db_prod.get("img") if db_prod else item.get("img", ""),
+                    "sellerId": db_prod.get("sellerId") if db_prod else item.get("sellerId"),
                 }
             )
 
@@ -132,6 +165,37 @@ class OrderListCreateView(APIView):
             orders_col = get_orders_collection()
             result = orders_col.insert_one(order_doc)
             order_doc["_id"] = result.inserted_id
+
+            # Automatically decrement stock and update inStock status
+            for it in sanitized_items:
+                raw_id = it.get("id")
+                qty = it.get("quantity", 1)
+                prod_query = {}
+                if isinstance(raw_id, int) or (isinstance(raw_id, str) and str(raw_id).isdigit()):
+                    prod_query = {"productId": int(raw_id)}
+                elif ObjectId.is_valid(str(raw_id)):
+                    prod_query = {"_id": ObjectId(str(raw_id))}
+
+                if prod_query:
+                    # Fetch and decrement
+                    p = products_col.find_one(prod_query)
+                    if p:
+                        curr = p.get("stock", 25)
+                        try:
+                            curr = int(curr)
+                        except (ValueError, TypeError):
+                            curr = 25
+                        new_stock = max(0, curr - qty)
+                        products_col.update_one(
+                            {"_id": p["_id"]},
+                            {
+                                "$set": {
+                                    "stock": new_stock,
+                                    "inStock": new_stock > 0,
+                                    "updatedAt": now,
+                                }
+                            },
+                        )
 
             return Response(
                 {

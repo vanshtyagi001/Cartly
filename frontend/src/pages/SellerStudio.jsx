@@ -36,10 +36,13 @@ export default function SellerStudio() {
 
   // New Product Modal / Form State
   const [isAddingProduct, setIsAddingProduct] = useState(false);
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [isUpdatingProduct, setIsUpdatingProduct] = useState(false);
   const [newProduct, setNewProduct] = useState({
     name: '',
     category: 'Hostel Essentials',
     price: '',
+    stock: 25,
     img: '',
     description: '',
   });
@@ -173,6 +176,7 @@ export default function SellerStudio() {
         name: '',
         category: 'Hostel Essentials',
         price: '',
+        stock: 25,
         img: '',
         description: '',
       });
@@ -182,6 +186,47 @@ export default function SellerStudio() {
       setActionError(err.message);
     } finally {
       setIsSavingProduct(false);
+    }
+  };
+
+  // Update Existing Product
+  const handleUpdateProductSubmit = async (e) => {
+    e.preventDefault();
+    if (!editingProduct) return;
+    setActionError('');
+    setIsUpdatingProduct(true);
+
+    try {
+      const res = await fetch(`${API_URL}/api/seller/products/${editingProduct.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          name: editingProduct.name,
+          category: editingProduct.category,
+          price: editingProduct.rawPrice !== undefined ? editingProduct.rawPrice : editingProduct.price,
+          stock: Math.max(0, parseInt(editingProduct.stock, 10) || 0),
+          img: editingProduct.img,
+          description: editingProduct.description,
+          inStock: Number(editingProduct.stock) > 0,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to update product.');
+      }
+
+      setActionSuccess(data.message || 'Product updated successfully!');
+      setEditingProduct(null);
+      loadSellerData();
+      setTimeout(() => setActionSuccess(''), 4000);
+    } catch (err) {
+      setActionError(err.message);
+    } finally {
+      setIsUpdatingProduct(false);
     }
   };
 
@@ -651,6 +696,141 @@ export default function SellerStudio() {
         {activeTab === 'inventory' && (
           <div className="space-y-8">
             
+            {/* Modal to Edit Existing Product */}
+            {editingProduct && (
+              <div className="bg-white border border-stone-200 p-8 shadow-md transition-all mb-8">
+                <div className="flex items-center justify-between pb-4 mb-6 border-b border-stone-200">
+                  <div>
+                    <span className="text-[10px] uppercase tracking-[0.2em] font-medium text-stone-400 block mb-1">
+                      Listing #{editingProduct.id}
+                    </span>
+                    <h3 className="font-serif text-2xl text-stone-900 tracking-tight">
+                      Edit Listing & Available Stock
+                    </h3>
+                  </div>
+                  <button
+                    onClick={() => { setEditingProduct(null); setActionError(''); }}
+                    className="text-stone-400 hover:text-stone-900 text-sm"
+                  >
+                    ✕ Close
+                  </button>
+                </div>
+
+                {actionError && (
+                  <div className="mb-4 p-3 bg-red-50 text-red-800 text-xs border border-red-200">
+                    {actionError}
+                  </div>
+                )}
+
+                <form onSubmit={handleUpdateProductSubmit} className="space-y-5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                    <div className="sm:col-span-2">
+                      <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
+                        Product / Item Name *
+                      </label>
+                      <input
+                        type="text"
+                        value={editingProduct.name || ''}
+                        onChange={(e) => setEditingProduct(prev => ({ ...prev, name: e.target.value }))}
+                        className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-2.5 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
+                        Category *
+                      </label>
+                      <select
+                        value={editingProduct.category || ''}
+                        onChange={(e) => setEditingProduct(prev => ({ ...prev, category: e.target.value }))}
+                        className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-2.5 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none"
+                      >
+                        {categories.map((cat) => (
+                          <option key={cat} value={cat}>
+                            {cat}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
+                        Price in Rupees (₹) *
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={editingProduct.rawPrice !== undefined ? editingProduct.rawPrice : (parseFloat(String(editingProduct.price).replace(/[^0-9.-]+/g, '')) || '')}
+                        onChange={(e) => setEditingProduct(prev => ({ ...prev, rawPrice: e.target.value, price: `₹${e.target.value}` }))}
+                        className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-2.5 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
+                        Units in Stock *
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={editingProduct.stock !== undefined ? editingProduct.stock : 25}
+                        onChange={(e) => setEditingProduct(prev => ({ ...prev, stock: e.target.value }))}
+                        className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-2.5 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none"
+                        required
+                      />
+                      <span className="text-[10px] text-stone-400 mt-1 block">
+                        {Number(editingProduct.stock) > 0 ? (
+                          <span className="text-emerald-700 font-medium">In Stock ({editingProduct.stock} available)</span>
+                        ) : (
+                          <span className="text-red-600 font-medium">Sold Out / Out of Stock</span>
+                        )}
+                      </span>
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <ImageUploadInput
+                        value={editingProduct.img || ''}
+                        onChange={(val) => setEditingProduct(prev => ({ ...prev, img: val }))}
+                        presets={imagePresets}
+                        label="Product Photo"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
+                      Description / Item Condition
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={editingProduct.description || ''}
+                      onChange={(e) => setEditingProduct(prev => ({ ...prev, description: e.target.value }))}
+                      className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-2.5 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-3">
+                    <button
+                      type="button"
+                      onClick={() => setEditingProduct(null)}
+                      className="px-6 py-2.5 text-xs uppercase tracking-widest text-stone-500 hover:text-stone-900"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isUpdatingProduct}
+                      className="bg-stone-900 text-white text-xs uppercase tracking-[0.15em] font-medium py-2.5 px-8 hover:bg-black transition-colors"
+                    >
+                      {isUpdatingProduct ? 'Saving Changes...' : 'Save Listing'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
             {/* Modal / Slide-down to Add New Product */}
             {isAddingProduct && (
               <div className="bg-white border border-stone-200 p-8 shadow-md transition-all mb-8">
@@ -720,6 +900,24 @@ export default function SellerStudio() {
                       />
                     </div>
 
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
+                        Units in Stock *
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={newProduct.stock !== undefined ? newProduct.stock : 25}
+                        onChange={(e) => setNewProduct(prev => ({ ...prev, stock: e.target.value }))}
+                        placeholder="e.g. 10"
+                        className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-2.5 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none"
+                        required
+                      />
+                      <span className="text-[10px] text-stone-400 mt-0.5 block">
+                        Auto-updates as students place orders.
+                      </span>
+                    </div>
+
                     <div className="sm:col-span-2">
                       <ImageUploadInput
                         value={newProduct.img}
@@ -779,15 +977,16 @@ export default function SellerStudio() {
             ) : (
               <div className="bg-white border border-stone-200 divide-y divide-stone-200 shadow-sm">
                 <div className="hidden sm:grid grid-cols-12 gap-4 px-6 py-4 text-[10px] uppercase tracking-widest font-semibold text-stone-400 border-b border-stone-200">
-                  <div className="col-span-6">Item</div>
+                  <div className="col-span-5">Item</div>
                   <div className="col-span-2">Category</div>
                   <div className="col-span-2">Price</div>
-                  <div className="col-span-2 text-right">Actions</div>
+                  <div className="col-span-2">Stock</div>
+                  <div className="col-span-1 text-right">Actions</div>
                 </div>
 
                 {products.map((item) => (
                   <div key={item.id} className="grid grid-cols-1 sm:grid-cols-12 gap-4 p-6 items-center group">
-                    <div className="sm:col-span-6 flex items-center gap-4">
+                    <div className="sm:col-span-5 flex items-center gap-4">
                       <div className="w-14 h-16 bg-[#FAF9F6] border border-stone-200 overflow-hidden shrink-0">
                         <img src={item.img} alt={item.name} className="w-full h-full object-cover mix-blend-multiply" />
                       </div>
@@ -807,13 +1006,23 @@ export default function SellerStudio() {
                       {item.price}
                     </div>
 
-                    <div className="sm:col-span-2 flex items-center justify-end gap-3">
-                      <Link
-                        to={`/product/${item.id}`}
-                        className="text-[10px] uppercase tracking-widest text-stone-500 hover:text-stone-900"
+                    <div className="sm:col-span-2">
+                      <span className={`inline-block px-2 py-0.5 text-[10px] uppercase tracking-wider font-semibold ${
+                        (item.stock !== undefined ? item.stock : 25) > 0
+                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                          : 'bg-red-50 text-red-800 border border-red-200'
+                      }`}>
+                        {(item.stock !== undefined ? item.stock : 25) > 0 ? `${item.stock !== undefined ? item.stock : 25} in stock` : 'Out of stock'}
+                      </span>
+                    </div>
+
+                    <div className="sm:col-span-1 flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => setEditingProduct({ ...item })}
+                        className="text-[10px] uppercase tracking-widest text-stone-700 hover:text-stone-900 underline font-medium"
                       >
-                        View
-                      </Link>
+                        Edit
+                      </button>
                       <button
                         onClick={() => handleDeleteProduct(item.id)}
                         className="text-[10px] uppercase tracking-widest text-red-600 hover:text-red-900"

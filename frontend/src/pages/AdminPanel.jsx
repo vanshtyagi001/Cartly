@@ -53,10 +53,14 @@ export default function AdminPanel() {
   const [catalogViewMode, setCatalogViewMode] = useState('tiles'); // 'tiles' | 'table'
   const [catalogPage, setCatalogPage] = useState(1);
   const [catalogPageSize, setCatalogPageSize] = useState(8);
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [editProductError, setEditProductError] = useState('');
+  const [isUpdatingProduct, setIsUpdatingProduct] = useState(false);
   const [newProduct, setNewProduct] = useState({
     name: '',
     category: 'Hostel Essentials',
     price: '',
+    stock: 25,
     img: '',
     description: '',
   });
@@ -300,6 +304,7 @@ export default function AdminPanel() {
           name: newProduct.name.trim(),
           category: newProduct.category,
           price: parsedPrice,
+          stock: Math.max(0, parseInt(newProduct.stock, 10) || 0),
           img: newProduct.img.trim(),
           description: newProduct.description.trim(),
         }),
@@ -310,13 +315,62 @@ export default function AdminPanel() {
 
       showNotice(`'${newProduct.name}' successfully added to platform catalog.`);
       setIsAddingProduct(false);
-      setNewProduct({ name: '', category: 'Hostel Essentials', price: '', img: '', description: '' });
+      setNewProduct({ name: '', category: 'Hostel Essentials', price: '', stock: 25, img: '', description: '' });
       setActiveTab('catalog');
       fetchAdminData();
     } catch (err) {
       setAddProductError(err.message || 'Error publishing product.');
     } finally {
       setIsSubmittingProduct(false);
+    }
+  };
+
+  // Update existing catalog product
+  const handleUpdateProduct = async (e) => {
+    e.preventDefault();
+    if (!editingProduct) return;
+    setEditProductError('');
+
+    if (!editingProduct.name.trim()) {
+      setEditProductError('Product name is required.');
+      return;
+    }
+
+    const parsedPrice = parseFloat(editingProduct.rawPrice !== undefined ? editingProduct.rawPrice : editingProduct.price);
+    if (isNaN(parsedPrice) || parsedPrice <= 0) {
+      setEditProductError('Please enter a valid price in rupees (greater than 0).');
+      return;
+    }
+
+    setIsUpdatingProduct(true);
+    try {
+      const res = await fetch(`${API_URL}/api/admin/products/${editingProduct.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          name: editingProduct.name.trim(),
+          category: editingProduct.category,
+          price: parsedPrice,
+          stock: Math.max(0, parseInt(editingProduct.stock, 10) || 0),
+          img: editingProduct.img.trim(),
+          description: editingProduct.description?.trim() || '',
+          inStock: Number(editingProduct.stock) > 0,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update product details.');
+
+      showNotice(`Product #${editingProduct.id} details updated.`);
+      setEditingProduct(null);
+      fetchAdminData();
+    } catch (err) {
+      setEditProductError(err.message || 'Error updating product.');
+    } finally {
+      setIsUpdatingProduct(false);
     }
   };
 
@@ -545,6 +599,149 @@ export default function AdminPanel() {
         </div>
       )}
 
+      {/* Modal to Edit Existing Product */}
+      {editingProduct && (
+        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white border border-stone-200 p-6 sm:p-8 shadow-2xl max-w-2xl w-full my-8 max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-4 mb-6 border-b border-stone-200">
+              <div>
+                <span className="text-[10px] uppercase tracking-[0.2em] font-medium text-stone-400 block mb-1">
+                  Catalog Item #{editingProduct.id}
+                </span>
+                <h3 className="font-serif text-2xl text-stone-900 tracking-tight">
+                  Edit Product & Stock Level
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setEditingProduct(null); setEditProductError(''); }}
+                className="text-stone-400 hover:text-stone-900 text-sm p-1.5 hover:bg-stone-100 transition-colors"
+                aria-label="Close modal"
+              >
+                ✕ Close
+              </button>
+            </div>
+
+            {editProductError && (
+              <div className="mb-5 p-3 bg-red-50 border border-red-200 text-red-700 text-xs">
+                {editProductError}
+              </div>
+            )}
+
+            <form onSubmit={handleUpdateProduct} className="space-y-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <div className="sm:col-span-2">
+                  <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
+                    Product Title *
+                  </label>
+                  <input
+                    type="text"
+                    value={editingProduct.name || ''}
+                    onChange={(e) => setEditingProduct(prev => ({ ...prev, name: e.target.value }))}
+                    className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-2.5 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500">
+                      Category *
+                    </label>
+                  </div>
+                  <select
+                    value={editingProduct.category || ''}
+                    onChange={(e) => setEditingProduct(prev => ({ ...prev, category: e.target.value }))}
+                    className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-2.5 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none"
+                  >
+                    {categories.map((c) => (
+                      <option key={c.id || c.name} value={c.name}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
+                    Price in Rupees (₹) *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="any"
+                    value={editingProduct.rawPrice !== undefined ? editingProduct.rawPrice : (parseFloat(String(editingProduct.price).replace(/[^0-9.-]+/g, '')) || '')}
+                    onChange={(e) => setEditingProduct(prev => ({ ...prev, rawPrice: e.target.value, price: `₹${e.target.value}` }))}
+                    className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-2.5 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
+                    Available Stock Count *
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={editingProduct.stock !== undefined ? editingProduct.stock : 25}
+                    onChange={(e) => setEditingProduct(prev => ({ ...prev, stock: e.target.value }))}
+                    className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-2.5 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none"
+                    required
+                  />
+                  <span className="text-[10px] text-stone-400 mt-1 block">
+                    {Number(editingProduct.stock) > 0 ? (
+                      <span className="text-emerald-700 font-medium">In Stock ({editingProduct.stock} units available)</span>
+                    ) : (
+                      <span className="text-red-600 font-medium">Out of Stock (Zero Available)</span>
+                    )}
+                  </span>
+                </div>
+
+                <div className="sm:col-span-2">
+                  <ImageUploadInput
+                    value={editingProduct.img || ''}
+                    onChange={(val) => setEditingProduct(prev => ({ ...prev, img: val }))}
+                    presets={adminImagePresets}
+                    label="Product Photo"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
+                  Product Description
+                </label>
+                <textarea
+                  rows={3}
+                  value={editingProduct.description || ''}
+                  onChange={(e) => setEditingProduct(prev => ({ ...prev, description: e.target.value }))}
+                  className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-2.5 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-stone-100">
+                <button
+                  type="button"
+                  onClick={() => { setEditingProduct(null); setEditProductError(''); }}
+                  className="px-6 py-2.5 text-xs uppercase tracking-widest text-stone-500 hover:text-stone-900 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUpdatingProduct}
+                  className="bg-stone-900 text-white text-xs uppercase tracking-[0.15em] font-medium py-2.5 px-8 hover:bg-black transition-colors disabled:opacity-50"
+                >
+                  {isUpdatingProduct ? 'Updating...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Modal to Add New Product - Accessible globally from any tab */}
       {isAddingProduct && (
         <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
@@ -639,6 +836,25 @@ export default function AdminPanel() {
                     className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-2.5 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none"
                     required
                   />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
+                    Available Stock *
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={newProduct.stock !== undefined ? newProduct.stock : 25}
+                    onChange={(e) => setNewProduct(prev => ({ ...prev, stock: e.target.value }))}
+                    placeholder="25"
+                    className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-2.5 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none"
+                    required
+                  />
+                  <span className="text-[10px] text-stone-400 mt-0.5 block">
+                    Automatically decrements upon campus orders.
+                  </span>
                 </div>
 
                 <div className="sm:col-span-2">
@@ -1331,9 +1547,18 @@ export default function AdminPanel() {
                           <span className="absolute top-3 left-3 bg-white/90 backdrop-blur-sm border border-stone-200 text-[9px] uppercase tracking-wider font-semibold px-2 py-0.5 text-stone-700">
                             {p.category}
                           </span>
-                          <span className="absolute top-3 right-3 bg-stone-900 text-white text-[9px] font-mono px-2 py-0.5">
-                            #{p.id}
-                          </span>
+                          <div className="absolute top-3 right-3 flex items-center gap-1.5">
+                            <span className={`text-[9px] uppercase tracking-wider font-semibold px-2 py-0.5 ${
+                              (p.stock !== undefined ? p.stock : 25) > 0
+                                ? 'bg-white/95 text-stone-900 border border-stone-200'
+                                : 'bg-red-600 text-white'
+                            }`}>
+                              Stock: {p.stock !== undefined ? p.stock : 25}
+                            </span>
+                            <span className="bg-stone-900 text-white text-[9px] font-mono px-2 py-0.5">
+                              #{p.id}
+                            </span>
+                          </div>
                         </div>
 
                         {/* Tile Information */}
@@ -1351,10 +1576,22 @@ export default function AdminPanel() {
                           </div>
 
                           <div className="pt-3 border-t border-stone-100 flex items-center justify-between">
-                            <span className="font-serif text-lg font-medium text-stone-900">
-                              {p.price}
-                            </span>
+                            <div>
+                              <span className="font-serif text-lg font-medium text-stone-900 block">
+                                {p.price}
+                              </span>
+                              <span className="text-[10px] text-stone-400">
+                                {(p.stock !== undefined ? p.stock : 25) > 0 ? `${p.stock !== undefined ? p.stock : 25} available` : 'Out of Stock'}
+                              </span>
+                            </div>
                             <div className="flex items-center gap-3">
+                              <button
+                                type="button"
+                                onClick={() => setEditingProduct({ ...p })}
+                                className="text-[10px] uppercase tracking-widest text-stone-700 hover:text-stone-900 border border-stone-200 bg-[#FAF9F6] px-2.5 py-1 font-medium transition-colors"
+                              >
+                                Edit / Stock
+                              </button>
                               <Link
                                 to={`/product/${p.id}`}
                                 target="_blank"
@@ -1388,6 +1625,7 @@ export default function AdminPanel() {
                           <th className="p-4">Item</th>
                           <th className="p-4">Category</th>
                           <th className="p-4">Price</th>
+                          <th className="p-4">Stock</th>
                           <th className="p-4">Seller Source</th>
                           <th className="p-4 text-right">Actions</th>
                         </tr>
@@ -1406,10 +1644,26 @@ export default function AdminPanel() {
                             </td>
                             <td className="p-4 text-stone-600">{p.category}</td>
                             <td className="p-4 font-serif text-stone-900 font-medium">{p.price}</td>
+                            <td className="p-4">
+                              <span className={`inline-block px-2 py-0.5 text-[10px] uppercase tracking-wider font-semibold ${
+                                (p.stock !== undefined ? p.stock : 25) > 0
+                                  ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                                  : 'bg-red-50 text-red-800 border border-red-200'
+                              }`}>
+                                {(p.stock !== undefined ? p.stock : 25) > 0 ? `${p.stock !== undefined ? p.stock : 25} in stock` : 'Out of stock'}
+                              </span>
+                            </td>
                             <td className="p-4 text-stone-500">
                               {p.sellerName || 'Cartly Official Hub'}
                             </td>
-                            <td className="p-4 text-right space-x-3">
+                            <td className="p-4 text-right space-x-2">
+                              <button
+                                type="button"
+                                onClick={() => setEditingProduct({ ...p })}
+                                className="text-[10px] uppercase tracking-widest text-stone-700 hover:text-stone-900 border border-stone-200 bg-[#FAF9F6] px-2.5 py-1 font-medium transition-colors"
+                              >
+                                Edit / Stock
+                              </button>
                               <Link
                                 to={`/product/${p.id}`}
                                 target="_blank"

@@ -215,6 +215,12 @@ class SellerProductListCreateView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        try:
+            raw_stock = data.get("stock", 25)
+            stock = max(0, int(raw_stock)) if raw_stock is not None else 25
+        except (ValueError, TypeError):
+            stock = 25
+
         # Default fallback image if none provided
         if not img:
             img = "https://images.unsplash.com/photo-1583847268964-b28dc8f51f92?q=80&w=800&auto=format&fit=crop"
@@ -233,12 +239,13 @@ class SellerProductListCreateView(APIView):
             "name": name,
             "category": category,
             "price": price,
+            "stock": stock,
             "img": img,
             "description": description or f"Listed by {seller_profile.get('storeName', user.get('name'))}",
             "sellerId": str(user["_id"]),
             "sellerName": seller_profile.get("storeName", user.get("name")),
             "sellerLocation": seller_profile.get("campusLocation", "Main Campus"),
-            "inStock": True,
+            "inStock": stock > 0,
             "createdAt": now,
             "updatedAt": now,
         }
@@ -285,6 +292,13 @@ class SellerProductDetailView(APIView):
             raw = str(data["price"])
             cleaned = "".join(ch for ch in raw if ch.isdigit() or ch in ".-")
             update_fields["price"] = float(cleaned) if cleaned else prod.get("price", 0)
+        if "stock" in data:
+            try:
+                new_stock = max(0, int(data["stock"]))
+                update_fields["stock"] = new_stock
+                update_fields["inStock"] = (new_stock > 0)
+            except (ValueError, TypeError):
+                pass
         if "img" in data and str(data["img"]).strip():
             update_fields["img"] = str(data["img"]).strip()
         if "description" in data:
