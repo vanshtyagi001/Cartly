@@ -5,8 +5,50 @@ from pymongo.errors import DuplicateKeyError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .repository import get_collection
+from .repository import get_categories_collection, get_collection
 from .serializers import format_product, json_safe, validate_product_payload
+
+
+DEFAULT_CATEGORIES = [
+    "Hostel Essentials",
+    "Electronics",
+    "Stationery",
+    "Trekking Essentials",
+]
+
+
+def ensure_default_categories():
+    col = get_categories_collection()
+    now = datetime.now(timezone.utc)
+    for cat in DEFAULT_CATEGORIES:
+        col.update_one(
+            {"name": cat},
+            {
+                "$setOnInsert": {
+                    "name": cat,
+                    "createdAt": now,
+                    "updatedAt": now,
+                }
+            },
+            upsert=True,
+        )
+
+
+class CategoryListView(APIView):
+    def get(self, request):
+        try:
+            ensure_default_categories()
+            col = get_categories_collection()
+            docs = list(col.find().sort("createdAt", 1))
+            names = [doc.get("name") for doc in docs if doc.get("name")]
+            # Guarantee defaults are always present and unique
+            for d in DEFAULT_CATEGORIES:
+                if d not in names:
+                    names.append(d)
+            return Response({"categories": names})
+        except Exception as error:
+            return Response({"categories": DEFAULT_CATEGORIES})
+
 
 
 class RootView(APIView):

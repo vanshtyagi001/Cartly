@@ -6,20 +6,29 @@ export default function Shop() {
   const [isSortOpen, setIsSortOpen] = useState(false);
   const sortDropdownRef = useRef(null);
   
-  // State to hold products from the database
+  // State to hold products and categories from backend
   const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([
+    "All Products", "Hostel Essentials", "Electronics", "Stationery", "Trekking Essentials"
+  ]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Fetch products from backend on component mount
+  // Fetch products and categories from backend on component mount
   useEffect(() => {
-    fetch(`${import.meta.env.VITE_API_URL}/api/products`)
-      .then(res => res.json())
-      .then(data => {
-        setProducts(data);
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    Promise.all([
+      fetch(`${apiUrl}/api/products`).then(r => r.json()).catch(() => []),
+      fetch(`${apiUrl}/api/categories`).then(r => r.json()).catch(() => ({ categories: [] }))
+    ])
+      .then(([prods, catData]) => {
+        setProducts(Array.isArray(prods) ? prods : []);
+        if (catData?.categories && Array.isArray(catData.categories)) {
+          setCategories(["All Products", ...catData.categories]);
+        }
         setIsLoading(false);
       })
       .catch(error => {
-        console.error("Error fetching products:", error);
+        console.error("Error fetching shop data:", error);
         setIsLoading(false);
       });
   }, []);
@@ -27,10 +36,6 @@ export default function Shop() {
   // Read current states from the URL, defaulting to Name: A to Z
   const activeCategory = searchParams.get("category") || "All Products";
   const activeSort = searchParams.get("sort") || "name-asc";
-
-  const categories = [
-    "All Products", "Hostel Essentials", "Electronics", "Stationery", "Trekking Essentials"
-  ];
 
   const sortOptions = [
     { id: 'name-asc', label: 'Name: A to Z' },

@@ -32,6 +32,10 @@ export default function AdminPanel() {
   const [orders, setOrders] = useState([]);
   const [products, setProducts] = useState([]);
   const [users, setUsers] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [isAddingCategory, setIsAddingCategory] = useState(false);
+  const [categoryActionError, setCategoryActionError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
 
   // Filters & State
@@ -122,6 +126,13 @@ export default function AdminPanel() {
       if (uRes.ok) {
         const uData = await uRes.json();
         setUsers(uData || []);
+      }
+
+      // 5. Categories
+      const cRes = await fetch(`${API_URL}/api/admin/categories`, { headers });
+      if (cRes.ok) {
+        const cData = await cRes.json();
+        setCategories(cData.categories || []);
       }
     } catch (err) {
       console.error('Error fetching admin data:', err);
@@ -309,6 +320,61 @@ export default function AdminPanel() {
     }
   };
 
+  // Create new category
+  const handleCreateCategory = async (e) => {
+    e.preventDefault();
+    setCategoryActionError('');
+    if (!newCategoryName.trim()) {
+      setCategoryActionError('Category name is required.');
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_URL}/api/admin/categories`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ name: newCategoryName.trim() }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to add category.');
+      }
+
+      showNotice(`Category '${newCategoryName.trim()}' added successfully.`);
+      setNewCategoryName('');
+      setIsAddingCategory(false);
+      fetchAdminData();
+    } catch (err) {
+      setCategoryActionError(err.message || 'Error creating category.');
+    }
+  };
+
+  // Delete custom category
+  const handleDeleteCategory = async (categoryName) => {
+    if (!window.confirm(`Are you sure you want to remove the category '${categoryName}'?`)) return;
+
+    try {
+      const res = await fetch(`${API_URL}/api/admin/categories/${encodeURIComponent(categoryName)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to delete category.');
+      }
+
+      showNotice(`Category '${categoryName}' deleted.`);
+      fetchAdminData();
+    } catch (err) {
+      showNotice(err.message || 'Error deleting category.');
+    }
+  };
+
   // Dedicated Admin Login screen if not authenticated
   if (!adminToken || !adminUser?.isAdmin) {
     return (
@@ -404,6 +470,81 @@ export default function AdminPanel() {
 
   return (
     <main className="flex-1 bg-[#FAF9F6] border-t border-stone-200 py-12 lg:py-16 px-6 md:px-12 min-h-[calc(100vh-88px)] relative">
+      {/* Modal to Add New Category */}
+      {isAddingCategory && (
+        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white border border-stone-200 p-6 sm:p-8 shadow-2xl max-w-md w-full animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 mb-5 border-b border-stone-200">
+              <div>
+                <span className="text-[10px] uppercase tracking-[0.2em] font-medium text-stone-400 block mb-1">
+                  Platform Taxonomy
+                </span>
+                <h3 className="font-serif text-xl text-stone-900 tracking-tight">
+                  Add Product Category
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAddingCategory(false);
+                  setCategoryActionError('');
+                  setNewCategoryName('');
+                }}
+                className="text-stone-400 hover:text-stone-900 text-sm p-1 hover:bg-stone-100 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            {categoryActionError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-xs">
+                {categoryActionError}
+              </div>
+            )}
+
+            <form onSubmit={handleCreateCategory} className="space-y-4">
+              <div>
+                <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
+                  Category Name *
+                </label>
+                <input
+                  type="text"
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  placeholder="e.g. Lab Equipment, Dorm Furniture, Tech Accessories"
+                  className="w-full bg-[#FAF9F6] border border-stone-200 px-3.5 py-2.5 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none"
+                  autoFocus
+                  required
+                />
+                <p className="text-[11px] text-stone-400 mt-1">
+                  Once added, this category will immediately appear in product listing forms for both admins and campus student sellers.
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-stone-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAddingCategory(false);
+                    setCategoryActionError('');
+                    setNewCategoryName('');
+                  }}
+                  className="px-4 py-2 text-xs uppercase tracking-widest text-stone-500 hover:text-stone-900 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="bg-stone-900 text-white text-xs uppercase tracking-[0.15em] font-medium py-2 px-6 hover:bg-black transition-colors"
+                >
+                  Create Category
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Modal to Add New Product - Accessible globally from any tab */}
       {isAddingProduct && (
         <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
@@ -450,18 +591,37 @@ export default function AdminPanel() {
                 </div>
 
                 <div>
-                  <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
-                    Category *
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500">
+                      Category *
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingCategory(true)}
+                      className="text-[10px] uppercase tracking-wider text-stone-500 hover:text-stone-900 underline font-medium"
+                    >
+                      + New Category
+                    </button>
+                  </div>
                   <select
                     value={newProduct.category}
                     onChange={(e) => setNewProduct(prev => ({ ...prev, category: e.target.value }))}
                     className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-2.5 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none"
                   >
-                    <option value="Hostel Essentials">Hostel Essentials</option>
-                    <option value="Electronics">Electronics</option>
-                    <option value="Stationery">Stationery</option>
-                    <option value="Trekking Essentials">Trekking Essentials</option>
+                    {categories.length > 0 ? (
+                      categories.map((c) => (
+                        <option key={c.id || c.name} value={c.name}>
+                          {c.name}
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="Hostel Essentials">Hostel Essentials</option>
+                        <option value="Electronics">Electronics</option>
+                        <option value="Stationery">Stationery</option>
+                        <option value="Trekking Essentials">Trekking Essentials</option>
+                      </>
+                    )}
                   </select>
                 </div>
 
@@ -908,26 +1068,46 @@ export default function AdminPanel() {
               </div>
 
               <div className="bg-white border border-stone-200 p-8 shadow-sm">
-                <h3 className="font-serif text-xl text-stone-900 tracking-tight mb-4">
-                  Active Categories
-                </h3>
-                <div className="space-y-2.5 text-xs text-stone-700">
-                  <div className="flex justify-between py-1.5 border-b border-stone-100">
-                    <span>Hostel Essentials</span>
-                    <span className="font-serif font-medium text-stone-900">Daily living, laundry & bedding</span>
-                  </div>
-                  <div className="flex justify-between py-1.5 border-b border-stone-100">
-                    <span>Electronics</span>
-                    <span className="font-serif font-medium text-stone-900">Peripherals, power & audio</span>
-                  </div>
-                  <div className="flex justify-between py-1.5 border-b border-stone-100">
-                    <span>Stationery</span>
-                    <span className="font-serif font-medium text-stone-900">Notebooks, pens & drafting</span>
-                  </div>
-                  <div className="flex justify-between py-1.5">
-                    <span>Trekking Essentials</span>
-                    <span className="font-serif font-medium text-stone-900">Backpacks, bottles & footwear</span>
-                  </div>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-serif text-xl text-stone-900 tracking-tight">
+                    Product Categories ({categories.length || 4})
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setIsAddingCategory(true)}
+                    className="text-[10px] uppercase tracking-wider font-semibold text-stone-900 border border-stone-200 px-3 py-1.5 hover:bg-stone-50 transition-colors"
+                  >
+                    + Add Category
+                  </button>
+                </div>
+                <div className="space-y-2.5 text-xs text-stone-700 max-h-56 overflow-y-auto pr-1">
+                  {categories.map((cat, idx) => (
+                    <div
+                      key={cat.id || cat.name || idx}
+                      className="flex items-center justify-between py-2 border-b border-stone-100 last:border-0"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-stone-900">{cat.name}</span>
+                        {cat.isDefault && (
+                          <span className="text-[9px] uppercase tracking-widest text-stone-400 bg-stone-100 px-1.5 py-0.5 font-medium">
+                            Core
+                          </span>
+                        )}
+                      </div>
+                      {!cat.isDefault && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteCategory(cat.name)}
+                          className="text-[10px] uppercase tracking-widest text-red-500 hover:text-red-800 transition-colors"
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {categories.length === 0 && (
+                    <p className="text-stone-400 italic text-xs py-2">Loading categories...</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -1100,14 +1280,24 @@ export default function AdminPanel() {
                   </button>
                 </div>
 
-                {/* Add Item Action */}
-                <button
-                  type="button"
-                  onClick={() => setIsAddingProduct(true)}
-                  className="bg-stone-900 text-white text-[10px] uppercase tracking-widest font-medium py-2 px-4 hover:bg-black transition-colors shrink-0"
-                >
-                  + Add Item
-                </button>
+                {/* Add Category & Add Item Actions */}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsAddingCategory(true)}
+                    className="border border-stone-200 bg-white hover:bg-stone-50 text-stone-700 text-[10px] uppercase tracking-widest font-medium py-2 px-3 transition-colors shrink-0"
+                    title="Define a new product category"
+                  >
+                    + Add Category
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsAddingProduct(true)}
+                    className="bg-stone-900 text-white text-[10px] uppercase tracking-widest font-medium py-2 px-4 hover:bg-black transition-colors shrink-0"
+                  >
+                    + Add Item
+                  </button>
+                </div>
               </div>
             </div>
 

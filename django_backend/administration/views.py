@@ -15,8 +15,9 @@ from accounts.auth import (
 from accounts.repository import get_users_collection
 from orders.repository import get_orders_collection
 from orders.serializers import format_order
-from products.repository import get_collection as get_products_collection
+from products.repository import get_categories_collection, get_collection as get_products_collection
 from products.serializers import format_product
+from products.views import DEFAULT_CATEGORIES, ensure_default_categories
 
 
 def check_is_admin(request):
@@ -344,4 +345,91 @@ class AdminSellerStatusView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+class AdminCategoriesView(APIView):
+    """
+    Endpoint for admins to list, add, and manage product categories.
+    GET /api/admin/categories
+    POST /api/admin/categories -> { "name": "Study Supplies" }
+    DELETE /api/admin/categories/<str:name>
+    """
+    def get(self, request):
+        is_ok, res = check_is_admin(request)
+        if not is_ok:
+            return res
+
+        ensure_default_categories()
+        col = get_categories_collection()
+        docs = list(col.find().sort("createdAt", 1))
+        categories = []
+        for d in docs:
+            name = d.get("name")
+            if name:
+                categories.append({
+                    "id": str(d.get("_id")),
+                    "name": name,
+                    "isDefault": name in DEFAULT_CATEGORIES,
+                    "createdAt": d.get("createdAt").isoformat() if isinstance(d.get("createdAt"), datetime) else str(d.get("createdAt") or ""),
+                })
+        return Response({"categories": categories}, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        is_ok, res = check_is_admin(request)
+        if not is_ok:
+            return res
+
+        data = request.data or {}
+        raw_name = str(data.get("name", "")).strip()
+
+        if not raw_name:
+            return Response({"error": "Category name cannot be empty."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Capitalize nicely or preserve case
+        cat_name = " ".join([word.capitalize() for word in raw_name.split()])
+
+        col = get_categories_collection()
+        existing = col.find_one({"name": {"$regex": f"^{cat_name}$", "$options": "i"}})
+        if existing:
+            return Response({"error": f"Category '{cat_name}' already exists."}, status=status.HTTP_400_BAD_REQUEST)
+
+        now = datetime.now(timezone.utc)
+        doc = {
+            "name": cat_name,
+            "createdAt": now,
+            "updatedAt": now,
+        }
+        ins = col.insert_one(doc)
+
+        return Response(
+            {
+                "message": f"Category '{cat_name}' created successfully.",
+                "category": {
+                    "id": str(ins.inserted_id),
+                    "name": cat_name,
+                    "isDefault": False,
+                    "createdAt": now.isoformat(),
+                },
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+    def delete(self, request, category_name=None):
+        is_ok, res = check_is_admin(request)
+        if not is_ok:
+            return res
+
+        if not category_name:
+            category_name = request.query_params.get("name", "").strip()
+
+        if not category_name:
+            return Response({"error": "Category name required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        col = get_categories_collection()
+        result = col.delete_one({"name": {"$regex": f"^{category_name}$", "$options": "i"}})
+        if result.deleted_count == 0:
+            return Response({"error": f"Category '{category_name}' not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        return Response({"message": f"Category '{category_name}' removed."}, status=status.HTTP_200_OK)
+
 

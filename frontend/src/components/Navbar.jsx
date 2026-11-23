@@ -17,13 +17,26 @@ export default function Navbar() {
   const [logoText, setLogoText] = useState(originalLogo);
   const [isScrambling, setIsScrambling] = useState(false);
 
-  const shopCategories = [
+  const [shopCategories, setShopCategories] = useState([
     "All Products",
     "Hostel Essentials",
     "Electronics",
     "Stationery",
     "Trekking Essentials"
-  ];
+  ]);
+
+  // Fetch live categories from backend
+  useEffect(() => {
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    fetch(`${apiUrl}/api/categories`)
+      .then(res => res.json())
+      .then(data => {
+        if (data?.categories && Array.isArray(data.categories)) {
+          setShopCategories(["All Products", ...data.categories]);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Close user dropdown when clicking outside
   useEffect(() => {

@@ -17,6 +17,12 @@ export default function SellerStudio() {
   });
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
+  const [categories, setCategories] = useState([
+    'Hostel Essentials',
+    'Electronics',
+    'Stationery',
+    'Trekking Essentials',
+  ]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Onboarding state
@@ -81,6 +87,15 @@ export default function SellerStudio() {
       if (ordersRes.ok) {
         const ordersData = await ordersRes.json();
         setOrders(ordersData || []);
+      }
+
+      // Load active platform categories
+      const catRes = await fetch(`${API_URL}/api/categories`);
+      if (catRes.ok) {
+        const catData = await catRes.json();
+        if (catData?.categories && Array.isArray(catData.categories)) {
+          setCategories(catData.categories);
+        }
       }
     } catch (err) {
       console.error('Failed to load seller studio data:', err);
@@ -682,10 +697,11 @@ export default function SellerStudio() {
                         onChange={(e) => setNewProduct(prev => ({ ...prev, category: e.target.value }))}
                         className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-2.5 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none"
                       >
-                        <option value="Hostel Essentials">Hostel Essentials</option>
-                        <option value="Electronics">Electronics</option>
-                        <option value="Stationery">Stationery</option>
-                        <option value="Trekking Essentials">Trekking Essentials</option>
+                        {categories.map((cat) => (
+                          <option key={cat} value={cat}>
+                            {cat}
+                          </option>
+                        ))}
                       </select>
                     </div>
 
