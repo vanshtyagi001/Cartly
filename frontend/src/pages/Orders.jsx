@@ -33,8 +33,25 @@ export default function Orders() {
   const { user, token, isAuthenticated } = useAuth();
   const [orders, setOrders] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedOrder, setSelectedOrder] = useState(null);
 
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
+  const getFulfillmentStage = (status) => {
+    switch (status) {
+      case 'Delivered':
+        return 3;
+      case 'Out for Delivery':
+        return 2;
+      case 'Preparing':
+        return 1;
+      case 'Cancelled':
+        return -1;
+      case 'Confirmed':
+      default:
+        return 0;
+    }
+  };
 
   useEffect(() => {
     const fetchOrders = async () => {
@@ -74,7 +91,248 @@ export default function Orders() {
   }, [API_URL, token, user]);
 
   return (
-    <main className="flex-1 w-full bg-white border-t border-stone-200 min-h-[calc(100vh-88px)] py-16 lg:py-24">
+    <main className="flex-1 w-full bg-white border-t border-stone-200 min-h-[calc(100vh-88px)] py-16 lg:py-24 relative">
+      {/* Detailed Order Modal */}
+      {selectedOrder && (
+        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+          <div className="bg-white border border-stone-200 p-6 sm:p-10 shadow-2xl max-w-3xl w-full my-8 max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
+            
+            {/* Modal Header */}
+            <div className="flex items-start justify-between pb-6 mb-8 border-b border-stone-200">
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-[10px] uppercase tracking-[0.25em] text-stone-400 font-semibold">
+                    Campus Delivery Manifest
+                  </span>
+                  <span className="text-[9px] uppercase tracking-wider bg-stone-100 text-stone-800 px-2 py-0.5 font-medium border border-stone-200">
+                    {selectedOrder.status || 'Confirmed'}
+                  </span>
+                </div>
+                <h2 className="text-2xl sm:text-3xl font-serif text-stone-900 tracking-tight">
+                  Order #{selectedOrder.id}
+                </h2>
+                <p className="text-xs text-stone-500 font-sans mt-1">
+                  Placed on {selectedOrder.date}
+                </p>
+              </div>
+
+              <button
+                onClick={() => setSelectedOrder(null)}
+                className="text-stone-400 hover:text-stone-900 text-sm p-2 hover:bg-stone-100 transition-colors"
+                aria-label="Close modal"
+              >
+                ✕ Close
+              </button>
+            </div>
+
+            {/* Tracking Progress Stepper */}
+            <div className="mb-10 bg-[#FAF9F6] border border-stone-200 p-6">
+              <span className="text-[9px] uppercase tracking-widest text-stone-400 font-semibold block mb-6">
+                Live Fulfillment Progress
+              </span>
+
+              {selectedOrder.status === 'Cancelled' ? (
+                <div className="p-4 bg-red-50 border border-red-200 text-red-800 text-xs">
+                  This order has been cancelled. If you believe this is an error, please reach out to campus logistics.
+                </div>
+              ) : (
+                <div className="relative">
+                  {/* Progress Line */}
+                  <div className="absolute top-3 left-6 right-6 h-0.5 bg-stone-200 -z-0" />
+                  <div
+                    className="absolute top-3 left-6 h-0.5 bg-stone-900 transition-all duration-500 -z-0"
+                    style={{
+                      width: `${Math.min(100, Math.max(0, (getFulfillmentStage(selectedOrder.status) / 3) * 100))}%`,
+                    }}
+                  />
+
+                  {/* 4 Checkpoint Dots */}
+                  <div className="relative z-10 flex justify-between items-start text-center">
+                    {[
+                      { label: 'Confirmed', sub: 'Order Logged' },
+                      { label: 'Preparing', sub: 'Packed at Hub' },
+                      { label: 'Out for Delivery', sub: 'En Route' },
+                      { label: 'Delivered', sub: 'Room Doorstep' },
+                    ].map((step, idx) => {
+                      const stageIdx = getFulfillmentStage(selectedOrder.status);
+                      const isComplete = stageIdx >= idx;
+                      const isCurrent = stageIdx === idx;
+
+                      return (
+                        <div key={idx} className="flex flex-col items-center flex-1">
+                          <div
+                            className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-medium transition-colors mb-2 ${
+                              isCurrent
+                                ? 'bg-stone-900 text-white ring-4 ring-stone-200'
+                                : isComplete
+                                ? 'bg-stone-900 text-white'
+                                : 'bg-white border-2 border-stone-300 text-stone-400'
+                            }`}
+                          >
+                            {isComplete && !isCurrent ? '✓' : idx + 1}
+                          </div>
+                          <span className={`text-[11px] font-medium leading-tight ${isComplete ? 'text-stone-900' : 'text-stone-400'}`}>
+                            {step.label}
+                          </span>
+                          <span className="text-[9px] text-stone-400 hidden sm:block mt-0.5">
+                            {step.sub}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Delivery Destination & Contact Details */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 text-xs">
+              <div className="border border-stone-200 p-5 bg-[#FAF9F6]/40">
+                <span className="text-[9px] uppercase tracking-widest text-stone-400 font-semibold block mb-3">
+                  Hostel Drop-off Point
+                </span>
+                <p className="font-serif text-stone-900 text-base mb-1">
+                  {selectedOrder.shippingAddress?.fullName || selectedOrder.userName || user?.name || 'Student Resident'}
+                </p>
+                <p className="text-stone-600 leading-relaxed">
+                  {selectedOrder.shippingAddress?.hostelBlock || 'Hostel Block'}, Room {selectedOrder.shippingAddress?.roomNumber || '—'}
+                </p>
+                <p className="text-stone-500">
+                  {selectedOrder.shippingAddress?.campus || 'Campus Grounds'}
+                </p>
+                {selectedOrder.shippingAddress?.phone && (
+                  <p className="text-stone-700 font-mono mt-2 pt-2 border-t border-stone-200/60">
+                    Contact: {selectedOrder.shippingAddress.phone}
+                  </p>
+                )}
+              </div>
+
+              <div className="border border-stone-200 p-5 bg-[#FAF9F6]/40">
+                <span className="text-[9px] uppercase tracking-widest text-stone-400 font-semibold block mb-3">
+                  Delivery Logistics & Schedule
+                </span>
+                <div className="space-y-2">
+                  <div>
+                    <span className="text-stone-400 block text-[10px] uppercase">Delivery Window:</span>
+                    <span className="text-stone-900 font-medium">
+                      {selectedOrder.shippingAddress?.deliverySlot || 'Standard Delivery (within 2 hours)'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-stone-400 block text-[10px] uppercase">Payment Mode:</span>
+                    <span className="text-stone-900 font-medium">
+                      {selectedOrder.paymentMethod || 'Cash on Delivery (Pay at Doorstep)'}
+                    </span>
+                  </div>
+                  {selectedOrder.shippingAddress?.deliveryNotes && (
+                    <div className="pt-2 border-t border-stone-200/60">
+                      <span className="text-stone-400 block text-[10px] uppercase">Resident Notes:</span>
+                      <p className="text-stone-600 italic">
+                        "{selectedOrder.shippingAddress.deliveryNotes}"
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Itemized Order Products */}
+            <div className="mb-8">
+              <span className="text-[9px] uppercase tracking-widest text-stone-400 font-semibold block mb-4">
+                Purchased Items ({selectedOrder.items?.length || 0})
+              </span>
+
+              <div className="border border-stone-200 divide-y divide-stone-100">
+                {selectedOrder.items?.map((item, idx) => (
+                  <div key={idx} className="p-4 flex items-center justify-between gap-4 hover:bg-stone-50/50 transition-colors">
+                    <div className="flex items-center gap-4">
+                      <div className="w-14 h-16 bg-white border border-stone-200 overflow-hidden shrink-0">
+                        {item.img ? (
+                          <img src={item.img} alt={item.name} className="w-full h-full object-cover mix-blend-multiply" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-stone-300 text-xs">Photo</div>
+                        )}
+                      </div>
+                      <div>
+                        <span className="text-[9px] uppercase tracking-wider text-stone-400 block">
+                          {item.category || 'Essential'}
+                        </span>
+                        <p className="font-serif text-sm text-stone-900 font-medium">
+                          {item.name}
+                        </p>
+                        <p className="text-[11px] text-stone-500 mt-0.5">
+                          Qty: {item.quantity} × {item.price}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <span className="text-sm font-sans font-medium text-stone-900">
+                        {item.price}
+                      </span>
+                      {item.id && (
+                        <Link
+                          to={`/product/${item.id}`}
+                          onClick={() => setSelectedOrder(null)}
+                          className="block text-[10px] text-stone-500 hover:text-stone-900 underline mt-1"
+                        >
+                          View item
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Financial Summary */}
+            <div className="border-t border-stone-200 pt-6 mb-8 flex justify-end">
+              <div className="w-full sm:w-72 space-y-2 text-xs">
+                <div className="flex justify-between text-stone-500">
+                  <span>Items Subtotal</span>
+                  <span>{selectedOrder.subtotal ? `₹${Number(selectedOrder.subtotal).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : selectedOrder.total}</span>
+                </div>
+                <div className="flex justify-between text-stone-500">
+                  <span>Campus Delivery</span>
+                  <span className="text-emerald-700 font-medium">Free</span>
+                </div>
+                <div className="flex justify-between text-stone-500">
+                  <span>Logistics & Handling</span>
+                  <span>₹0.00</span>
+                </div>
+                <div className="flex justify-between text-stone-900 font-medium text-sm pt-2 border-t border-stone-200">
+                  <span>Total Payable</span>
+                  <span className="font-serif text-base">{selectedOrder.total}</span>
+                </div>
+                <p className="text-[10px] text-stone-400 pt-1 text-right">
+                  Payment collected in cash or QR at room handover.
+                </p>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex flex-wrap items-center justify-between gap-4 pt-6 border-t border-stone-200">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="text-[10px] uppercase tracking-widest text-stone-600 hover:text-stone-900 border border-stone-200 px-4 py-2.5 bg-[#FAF9F6] transition-colors"
+              >
+                Print Manifest / Receipt
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedOrder(null)}
+                className="bg-stone-900 text-white text-[10px] uppercase tracking-widest font-medium px-8 py-2.5 hover:bg-black transition-colors"
+              >
+                Done
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
       <div className="max-w-[1000px] mx-auto px-8 md:px-12">
         
         {/* Page Header */}
@@ -136,7 +394,14 @@ export default function Orders() {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-6 pb-6 border-b border-stone-200 mb-6">
                   <div className="flex flex-col gap-1">
                     <span className="text-[9px] uppercase tracking-widest text-stone-400 font-semibold">Order Number</span>
-                    <span className="text-sm font-sans font-medium text-stone-900">{order.id}</span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedOrder(order)}
+                      className="text-sm font-sans font-medium text-stone-900 hover:text-amber-900 text-left underline underline-offset-4 decoration-stone-300 hover:decoration-stone-900 transition-colors"
+                      title="View complete delivery manifest"
+                    >
+                      {order.id}
+                    </button>
                   </div>
                   <div className="flex flex-col gap-1">
                     <span className="text-[9px] uppercase tracking-widest text-stone-400 font-semibold">Date Placed</span>
@@ -218,6 +483,24 @@ export default function Orders() {
                       </div>
                     </div>
                   ))}
+                </div>
+
+                {/* Order Card Footer Action */}
+                <div className="pt-6 mt-6 border-t border-stone-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="text-[11px] text-stone-500 font-mono">
+                    {order.items?.length || 0} {order.items?.length === 1 ? 'essential item' : 'essential items'} • Campus Doorstep Delivery
+                  </div>
+                  
+                  <button
+                    type="button"
+                    onClick={() => setSelectedOrder(order)}
+                    className="inline-flex items-center gap-2 bg-stone-900 text-white hover:bg-black text-[10px] uppercase tracking-widest font-medium py-2.5 px-6 transition-colors shadow-sm"
+                  >
+                    <span>View Order Details & Tracking</span>
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                    </svg>
+                  </button>
                 </div>
                 
               </div>

@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from bson import ObjectId
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -144,3 +145,14 @@ class OrderListCreateView(APIView):
                 {"error": f"Failed to place order: {str(exc)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+class OrderDetailView(APIView):
+    def get(self, request, order_id):
+        orders_col = get_orders_collection()
+        doc = orders_col.find_one({"orderId": order_id})
+        if not doc and ObjectId.is_valid(order_id):
+            doc = orders_col.find_one({"_id": ObjectId(order_id)})
+        if not doc:
+            return Response({"error": "Order not found."}, status=status.HTTP_404_NOT_FOUND)
+        return Response(format_order(doc), status=status.HTTP_200_OK)
