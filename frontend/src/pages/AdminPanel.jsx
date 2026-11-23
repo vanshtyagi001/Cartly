@@ -40,6 +40,7 @@ export default function AdminPanel() {
   const [notification, setNotification] = useState('');
   const [isAddingProduct, setIsAddingProduct] = useState(false);
   const [addProductError, setAddProductError] = useState('');
+  const [selectedAdminOrder, setSelectedAdminOrder] = useState(null);
   const [newProduct, setNewProduct] = useState({
     name: '',
     category: 'Hostel Essentials',
@@ -179,6 +180,7 @@ export default function AdminPanel() {
 
       if (res.ok) {
         showNotice(`Order #${orderId} status set to ${newStatus}.`);
+        setSelectedAdminOrder(prev => (prev && prev.id === orderId ? { ...prev, status: newStatus } : prev));
         fetchAdminData();
       }
     } catch (err) {
@@ -459,6 +461,219 @@ export default function AdminPanel() {
         </div>
       )}
 
+      {/* Modal to View Order in Full Detail */}
+      {selectedAdminOrder && (
+        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+          <div className="bg-white border border-stone-200 p-6 sm:p-10 shadow-2xl max-w-3xl w-full my-8 max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
+            
+            {/* Modal Header */}
+            <div className="flex items-start justify-between pb-6 mb-6 border-b border-stone-200">
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-[10px] uppercase tracking-[0.25em] text-stone-400 font-semibold">
+                    Platform Master Logistics Record
+                  </span>
+                  <span className="text-[9px] uppercase tracking-wider bg-stone-900 text-white px-2 py-0.5 font-medium">
+                    Order #{selectedAdminOrder.id}
+                  </span>
+                </div>
+                <h2 className="text-2xl sm:text-3xl font-serif text-stone-900 tracking-tight">
+                  Delivery Oversight & Manifest
+                </h2>
+                <p className="text-xs text-stone-500 font-sans mt-1">
+                  Placed on {selectedAdminOrder.date} • Registered under account {selectedAdminOrder.userEmail || selectedAdminOrder.userName || 'Student'}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedAdminOrder(null)}
+                className="text-stone-400 hover:text-stone-900 text-sm p-2 hover:bg-stone-100 transition-colors"
+                aria-label="Close modal"
+              >
+                ✕ Close
+              </button>
+            </div>
+
+            {/* Status Management Bar */}
+            <div className="mb-8 p-4 bg-[#FAF9F6] border border-stone-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <span className="text-[10px] uppercase tracking-widest text-stone-500 font-semibold">
+                  Fulfillment Status:
+                </span>
+                <span className={`text-xs px-2.5 py-1 font-medium border ${
+                  selectedAdminOrder.status === 'Delivered'
+                    ? 'bg-stone-900 text-white border-stone-900'
+                    : selectedAdminOrder.status === 'Cancelled'
+                    ? 'bg-red-50 text-red-700 border-red-200'
+                    : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                }`}>
+                  {selectedAdminOrder.status || 'Confirmed'}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] uppercase tracking-widest text-stone-400 font-medium">
+                  Update Status:
+                </span>
+                <select
+                  value={selectedAdminOrder.status || 'Confirmed'}
+                  onChange={(e) => handleOrderStatusUpdate(selectedAdminOrder.id, e.target.value)}
+                  className="bg-white border border-stone-300 text-xs px-3 py-1.5 text-stone-900 focus:outline-none focus:border-stone-900 font-medium cursor-pointer"
+                >
+                  <option value="Confirmed">Confirmed</option>
+                  <option value="Preparing">Preparing</option>
+                  <option value="Out for Delivery">Out for Delivery</option>
+                  <option value="Delivered">Delivered</option>
+                  <option value="Cancelled">Cancelled</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Student & Delivery Destination Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8 text-xs">
+              <div className="border border-stone-200 p-5 bg-[#FAF9F6]/40">
+                <span className="text-[9px] uppercase tracking-widest text-stone-400 font-semibold block mb-3">
+                  Student Recipient Details
+                </span>
+                <p className="font-serif text-stone-900 text-base mb-1">
+                  {selectedAdminOrder.shippingAddress?.fullName || selectedAdminOrder.userName || 'Student User'}
+                </p>
+                <p className="text-stone-600 font-mono text-[11px] mb-1">
+                  {selectedAdminOrder.userEmail || 'No account email recorded'}
+                </p>
+                <p className="text-stone-700 font-mono mt-3 pt-2 border-t border-stone-200/60">
+                  Phone: {selectedAdminOrder.shippingAddress?.phone || 'Not provided'}
+                </p>
+              </div>
+
+              <div className="border border-stone-200 p-5 bg-[#FAF9F6]/40">
+                <span className="text-[9px] uppercase tracking-widest text-stone-400 font-semibold block mb-3">
+                  Campus Hostel Destination
+                </span>
+                <p className="font-serif text-stone-900 text-base mb-1">
+                  {selectedAdminOrder.shippingAddress?.hostelBlock || 'Hostel Block'}, Room {selectedAdminOrder.shippingAddress?.roomNumber || '—'}
+                </p>
+                <p className="text-stone-500 mb-2">
+                  {selectedAdminOrder.shippingAddress?.campus || 'Campus Grounds'}
+                </p>
+                <div className="pt-2 border-t border-stone-200/60 space-y-1">
+                  <div>
+                    <span className="text-stone-400 text-[10px] uppercase">Delivery Window: </span>
+                    <span className="text-stone-900 font-medium">
+                      {selectedAdminOrder.shippingAddress?.deliverySlot || 'Standard Delivery (within 2 hours)'}
+                    </span>
+                  </div>
+                  {selectedAdminOrder.shippingAddress?.deliveryNotes && (
+                    <div>
+                      <span className="text-stone-400 text-[10px] uppercase">Resident Note: </span>
+                      <span className="text-stone-700 italic">
+                        "{selectedAdminOrder.shippingAddress.deliveryNotes}"
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Order Items Table */}
+            <div className="mb-8">
+              <span className="text-[9px] uppercase tracking-widest text-stone-400 font-semibold block mb-4">
+                Ordered Items ({selectedAdminOrder.items?.length || 0})
+              </span>
+
+              <div className="border border-stone-200 divide-y divide-stone-100 overflow-hidden">
+                {selectedAdminOrder.items?.map((item, idx) => (
+                  <div key={idx} className="p-4 flex items-center justify-between gap-4 hover:bg-stone-50/50 transition-colors">
+                    <div className="flex items-center gap-4">
+                      <div className="w-14 h-16 bg-white border border-stone-200 overflow-hidden shrink-0">
+                        {item.img ? (
+                          <img src={item.img} alt={item.name} className="w-full h-full object-cover mix-blend-multiply" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-stone-300 text-xs">Photo</div>
+                        )}
+                      </div>
+                      <div>
+                        <span className="text-[9px] uppercase tracking-wider text-stone-400 block">
+                          {item.category || 'Essential'}
+                        </span>
+                        <p className="font-serif text-sm text-stone-900 font-medium">
+                          {item.name}
+                        </p>
+                        <p className="text-[11px] text-stone-500 mt-0.5">
+                          Quantity: {item.quantity} × {item.price}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <span className="text-sm font-sans font-medium text-stone-900">
+                        {item.price}
+                      </span>
+                      {item.id && (
+                        <Link
+                          to={`/product/${item.id}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block text-[10px] text-stone-500 hover:text-stone-900 underline mt-1"
+                        >
+                          View in Shop ↗
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Payment & Settlement Summary */}
+            <div className="border-t border-stone-200 pt-6 mb-8 flex justify-end">
+              <div className="w-full sm:w-72 space-y-2 text-xs">
+                <div className="flex justify-between text-stone-500">
+                  <span>Items Subtotal</span>
+                  <span>{selectedAdminOrder.subtotal ? `₹${Number(selectedAdminOrder.subtotal).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : selectedAdminOrder.total}</span>
+                </div>
+                <div className="flex justify-between text-stone-500">
+                  <span>Campus Courier</span>
+                  <span className="text-emerald-700 font-medium">Free</span>
+                </div>
+                <div className="flex justify-between text-stone-500">
+                  <span>Handling & Logistics</span>
+                  <span>₹0.00</span>
+                </div>
+                <div className="flex justify-between text-stone-900 font-medium text-sm pt-2 border-t border-stone-200">
+                  <span>Gross Order Value</span>
+                  <span className="font-serif text-base">{selectedAdminOrder.total}</span>
+                </div>
+                <div className="text-[10px] text-stone-400 pt-1 text-right">
+                  Method: {selectedAdminOrder.paymentMethod || 'Cash on Delivery'}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex flex-wrap items-center justify-between gap-4 pt-6 border-t border-stone-200">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="text-[10px] uppercase tracking-widest text-stone-600 hover:text-stone-900 border border-stone-200 px-4 py-2.5 bg-[#FAF9F6] transition-colors"
+              >
+                Print Slip / Invoice
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedAdminOrder(null)}
+                className="bg-stone-900 text-white text-[10px] uppercase tracking-widest font-medium px-8 py-2.5 hover:bg-black transition-colors"
+              >
+                Done
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
       <div className="max-w-[1300px] mx-auto">
         
         {/* Admin Header */}
@@ -682,12 +897,22 @@ export default function AdminPanel() {
                       <th className="p-4">Items</th>
                       <th className="p-4">Total</th>
                       <th className="p-4">Fulfillment Status</th>
+                      <th className="p-4 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-stone-100">
                     {filteredOrders.map((order) => (
                       <tr key={order.id} className="hover:bg-stone-50/50 transition-colors">
-                        <td className="p-4 font-medium text-stone-900">{order.id}</td>
+                        <td className="p-4">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedAdminOrder(order)}
+                            className="font-medium text-stone-900 hover:text-amber-900 text-left underline underline-offset-4 decoration-stone-300 hover:decoration-stone-900 transition-colors"
+                            title="Open full order details"
+                          >
+                            {order.id}
+                          </button>
+                        </td>
                         <td className="p-4 text-stone-500 whitespace-nowrap">{order.date}</td>
                         <td className="p-4">
                           <p className="font-medium text-stone-900">{order.shippingAddress?.fullName || order.userName}</p>
@@ -712,6 +937,16 @@ export default function AdminPanel() {
                             <option value="Delivered">Delivered</option>
                             <option value="Cancelled">Cancelled</option>
                           </select>
+                        </td>
+                        <td className="p-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedAdminOrder(order)}
+                            className="text-[10px] uppercase tracking-widest font-medium border border-stone-200 hover:border-stone-900 bg-white hover:bg-[#FAF9F6] text-stone-800 px-3 py-1.5 transition-colors"
+                            title="View full order manifest"
+                          >
+                            Details →
+                          </button>
                         </td>
                       </tr>
                     ))}
