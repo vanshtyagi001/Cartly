@@ -78,6 +78,8 @@ Cartly is built on a decoupled full-stack architecture prioritizing component re
 | `DELETE`| `/api/seller/products/<id>` | Deletes a listing owned by this seller | Yes |
 | `GET` | `/api/seller/orders` | Retrieves orders to fulfill for this seller | Yes |
 | `PATCH`| `/api/seller/orders/<id>/status`| Updates order fulfillment status (Preparing/Delivered) | Yes |
+| `POST` | `/api/admin/login` | Authenticates administrator credentials defined in `.env` | No |
+| `GET` | `/api/admin/me` | Validates active administrative session token | Admin |
 | `GET` | `/api/admin/metrics` | Platform overview KPIs (GMV, volume, essentials, users) | Admin |
 | `GET` | `/api/admin/orders` | System-wide order logs across all campus sellers | Admin |
 | `PATCH`| `/api/admin/orders/<id>/status` | Overrides or updates order fulfillment lifecycle status | Admin |

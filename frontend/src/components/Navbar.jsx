@@ -220,19 +220,6 @@ export default function Navbar() {
                   </svg>
                 </Link>
 
-                {user?.isAdmin && (
-                  <Link
-                    to="/admin"
-                    onClick={() => setIsUserMenuOpen(false)}
-                    className="flex items-center justify-between px-5 py-2 text-xs text-stone-900 bg-stone-100/70 hover:bg-stone-200/60 transition-colors font-medium border-t border-stone-100"
-                  >
-                    <span className="uppercase tracking-widest text-[10px]">Admin Console</span>
-                    <svg className="w-3.5 h-3.5 text-stone-900" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </Link>
-                )}
-
                 <div className="border-t border-stone-100 my-2" />
 
                 <button

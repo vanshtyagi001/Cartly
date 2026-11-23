@@ -4,10 +4,22 @@ import { useAuth } from '../context/AuthContext';
 import ImageUploadInput from '../components/ImageUploadInput';
 
 export default function AdminPanel() {
-  const { user, token, isAuthenticated } = useAuth();
   const navigate = useNavigate();
-
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
+  const [adminToken, setAdminToken] = useState(() => localStorage.getItem('cartly_admin_token') || '');
+  const [adminUser, setAdminUser] = useState(() => {
+    try {
+      const stored = localStorage.getItem('cartly_admin_user');
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [adminCredentials, setAdminCredentials] = useState({ email: '', password: '' });
+  const [loginError, setLoginError] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'orders' | 'catalog' | 'users'
   const [metrics, setMetrics] = useState({
@@ -36,15 +48,34 @@ export default function AdminPanel() {
   });
   const [isSubmittingProduct, setIsSubmittingProduct] = useState(false);
 
+  // Validate active token on mount
+  useEffect(() => {
+    if (!adminToken) return;
+    fetch(`${API_URL}/api/admin/me`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    })
+      .then((res) => {
+        if (!res.ok) {
+          handleAdminLogout();
+        } else {
+          return res.json();
+        }
+      })
+      .then((data) => {
+        if (data?.user) setAdminUser(data.user);
+      })
+      .catch(() => {});
+  }, [adminToken]);
+
   const fetchAdminData = async () => {
-    if (!token || !user?.isAdmin) {
+    if (!adminToken) {
       setIsLoading(false);
       return;
     }
 
     setIsLoading(true);
     try {
-      const headers = { Authorization: `Bearer ${token}` };
+      const headers = { Authorization: `Bearer ${adminToken}` };
 
       // 1. Metrics
       const mRes = await fetch(`${API_URL}/api/admin/metrics`, { headers });
@@ -82,11 +113,46 @@ export default function AdminPanel() {
 
   useEffect(() => {
     fetchAdminData();
-  }, [token, user?.isAdmin]);
+  }, [adminToken]);
 
   const showNotice = (msg) => {
     setNotification(msg);
     setTimeout(() => setNotification(''), 4000);
+  };
+
+  const handleAdminLogin = async (e) => {
+    e.preventDefault();
+    setLoginError('');
+    setIsLoggingIn(true);
+    try {
+      const res = await fetch(`${API_URL}/api/admin/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(adminCredentials),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setLoginError(data.error || 'Invalid administrative credentials.');
+        return;
+      }
+      localStorage.setItem('cartly_admin_token', data.token);
+      localStorage.setItem('cartly_admin_user', JSON.stringify(data.user));
+      setAdminToken(data.token);
+      setAdminUser(data.user);
+      setAdminCredentials({ email: '', password: '' });
+    } catch (err) {
+      setLoginError('Unable to connect to administrative authentication service.');
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleAdminLogout = () => {
+    localStorage.removeItem('cartly_admin_token');
+    localStorage.removeItem('cartly_admin_user');
+    setAdminToken('');
+    setAdminUser(null);
+    setAdminCredentials({ email: '', password: '' });
   };
 
   // Update order status
@@ -96,7 +162,7 @@ export default function AdminPanel() {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${adminToken}`,
         },
         body: JSON.stringify({ status: newStatus }),
       });
@@ -117,7 +183,7 @@ export default function AdminPanel() {
     try {
       const res = await fetch(`${API_URL}/api/admin/products/${productId}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${adminToken}` },
       });
 
       if (res.ok) {
@@ -138,7 +204,7 @@ export default function AdminPanel() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${adminToken}`,
         },
         body: JSON.stringify(newProduct),
       });
@@ -157,51 +223,73 @@ export default function AdminPanel() {
     }
   };
 
-  // Auth & Admin check
-  if (!isAuthenticated) {
+  // Dedicated Admin Login screen if not authenticated
+  if (!adminToken || !adminUser?.isAdmin) {
     return (
       <main className="flex-1 bg-[#FAF9F6] border-t border-stone-200 py-24 px-6 flex items-center justify-center min-h-[calc(100vh-88px)]">
-        <div className="max-w-md w-full bg-white border border-stone-200 p-8 sm:p-12 text-center shadow-sm">
-          <span className="text-[10px] uppercase tracking-[0.25em] font-medium text-stone-400 block mb-3">
-            Internal Portal
-          </span>
-          <h1 className="text-3xl font-serif text-stone-900 tracking-tight mb-4">
-            Admin Sign In Required
-          </h1>
-          <p className="text-stone-500 text-xs leading-relaxed mb-8">
-            Access to platform operations, campus metrics, and order fulfillment is restricted to authorized personnel.
-          </p>
-          <Link
-            to="/login"
-            state={{ from: { pathname: '/admin' } }}
-            className="inline-block w-full bg-stone-900 text-white text-xs uppercase tracking-[0.15em] font-medium py-4 hover:bg-black transition-colors"
-          >
-            Sign In with Admin Account
-          </Link>
-        </div>
-      </main>
-    );
-  }
+        <div className="max-w-md w-full bg-white border border-stone-200 p-8 sm:p-12 shadow-sm">
+          <div className="text-center mb-8">
+            <span className="text-[10px] uppercase tracking-[0.25em] font-medium text-stone-400 block mb-2">
+              Cartly Operations
+            </span>
+            <h1 className="text-2xl sm:text-3xl font-serif text-stone-900 tracking-tight">
+              Admin Console
+            </h1>
+            <p className="text-stone-500 text-xs mt-2 leading-relaxed">
+              Platform administration, catalog control, and campus fulfillment logs.
+            </p>
+          </div>
 
-  if (!user?.isAdmin) {
-    return (
-      <main className="flex-1 bg-[#FAF9F6] border-t border-stone-200 py-24 px-6 flex items-center justify-center min-h-[calc(100vh-88px)]">
-        <div className="max-w-md w-full bg-white border border-stone-200 p-8 sm:p-12 text-center shadow-sm">
-          <span className="text-[10px] uppercase tracking-[0.25em] font-medium text-stone-400 block mb-3">
-            Access Restricted
-          </span>
-          <h1 className="text-2xl font-serif text-stone-900 tracking-tight mb-4">
-            Administrator Privileges Required
-          </h1>
-          <p className="text-stone-500 text-xs leading-relaxed mb-6">
-            Signed in as <strong>{user.email}</strong>. This account does not hold administrator access rights for the campus portal.
-          </p>
-          <Link
-            to="/shop"
-            className="inline-block bg-stone-900 text-white text-xs uppercase tracking-[0.15em] font-medium py-3 px-8 hover:bg-black transition-colors"
-          >
-            Return to Shop
-          </Link>
+          {loginError && (
+            <div className="mb-6 p-3 bg-red-50 border border-red-200 text-red-700 text-xs">
+              {loginError}
+            </div>
+          )}
+
+          <form onSubmit={handleAdminLogin} className="space-y-5">
+            <div>
+              <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
+                Admin Email Address
+              </label>
+              <input
+                type="email"
+                required
+                value={adminCredentials.email}
+                onChange={(e) => setAdminCredentials(prev => ({ ...prev, email: e.target.value }))}
+                placeholder="admin@cartly.com"
+                className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-3 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
+                Admin Password
+              </label>
+              <input
+                type="password"
+                required
+                value={adminCredentials.password}
+                onChange={(e) => setAdminCredentials(prev => ({ ...prev, password: e.target.value }))}
+                placeholder="••••••••••••"
+                className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-3 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={isLoggingIn}
+              className="w-full bg-stone-900 text-white text-xs uppercase tracking-[0.15em] font-medium py-3.5 hover:bg-black transition-colors disabled:opacity-50"
+            >
+              {isLoggingIn ? 'Authenticating...' : 'Sign In to Console'}
+            </button>
+          </form>
+
+          <div className="mt-8 pt-6 border-t border-stone-100 flex items-center justify-between text-[11px] text-stone-400">
+            <span>Server-side credentials (.env)</span>
+            <Link to="/" className="text-stone-700 hover:text-stone-950 underline">
+              Return to Store
+            </Link>
+          </div>
         </div>
       </main>
     );
@@ -236,9 +324,12 @@ export default function AdminPanel() {
             <h1 className="text-3xl md:text-5xl font-serif text-stone-900 tracking-tight">
               Platform Operations.
             </h1>
+            <p className="text-[11px] text-stone-500 font-mono mt-1">
+              Active Administrator: {adminUser?.email || 'admin@cartly.com'}
+            </p>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-3">
             <button
               onClick={() => setIsAddingProduct(true)}
               className="bg-stone-900 text-white text-xs uppercase tracking-[0.15em] font-medium py-3 px-6 hover:bg-black transition-colors"
@@ -251,6 +342,13 @@ export default function AdminPanel() {
             >
               Public Catalog
             </Link>
+            <button
+              onClick={handleAdminLogout}
+              className="text-xs uppercase tracking-[0.15em] font-medium text-red-600 hover:text-red-700 border border-red-200 bg-red-50/50 hover:bg-red-50 py-3 px-4 transition-colors"
+              title="Sign out of administrative session"
+            >
+              Exit Console
+            </button>
           </div>
         </div>
 

@@ -129,7 +129,6 @@ export default function Footer() {
           &copy; {new Date().getFullYear()} Cartly.
         </div>
         <div className="flex gap-8 text-[10px] uppercase tracking-[0.1em] text-stone-600 font-medium">
-          <Link to="/admin" className="hover:text-stone-300 transition-colors duration-300">Admin Portal</Link>
           <a href="#terms" className="hover:text-stone-300 transition-colors duration-300">Terms of Service</a>
           <a href="#privacy" className="hover:text-stone-300 transition-colors duration-300">Privacy Policy</a>
         </div>

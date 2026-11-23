@@ -1,10 +1,17 @@
+import os
 from datetime import datetime, timezone
 from bson import ObjectId
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from accounts.auth import get_user_from_request, serialize_user
+from accounts.auth import (
+    generate_token,
+    get_user_from_request,
+    hash_password,
+    serialize_user,
+    verify_password,
+)
 from accounts.repository import get_users_collection
 from orders.repository import get_orders_collection
 from orders.serializers import format_order
@@ -19,6 +26,75 @@ def check_is_admin(request):
     if not user.get("isAdmin", False):
         return False, Response({"error": "Administrator privileges required."}, status=status.HTTP_403_FORBIDDEN)
     return True, user
+
+
+class AdminLoginView(APIView):
+    def post(self, request):
+        data = request.data or {}
+        email = str(data.get("email", "")).strip().lower()
+        password = str(data.get("password", "")).strip()
+
+        if not email or not password:
+            return Response(
+                {"error": "Admin email and password are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        env_admin_email = os.environ.get("ADMIN_EMAIL", "admin@cartly.com").strip().lower()
+        env_admin_password = os.environ.get("ADMIN_PASSWORD", "cartlyadmin123").strip()
+
+        users_col = get_users_collection()
+        admin_user = None
+
+        # 1. Match against .env credentials
+        if email == env_admin_email and password == env_admin_password:
+            admin_user = users_col.find_one({"email": env_admin_email})
+            now = datetime.now(timezone.utc)
+            if not admin_user:
+                new_admin = {
+                    "name": "Cartly Administrator",
+                    "email": env_admin_email,
+                    "password": hash_password(env_admin_password),
+                    "isAdmin": True,
+                    "isSeller": False,
+                    "createdAt": now,
+                    "updatedAt": now,
+                }
+                res = users_col.insert_one(new_admin)
+                admin_user = users_col.find_one({"_id": res.inserted_id})
+            else:
+                if not admin_user.get("isAdmin"):
+                    users_col.update_one({"_id": admin_user["_id"]}, {"$set": {"isAdmin": True, "updatedAt": now}})
+                    admin_user["isAdmin"] = True
+        else:
+            # 2. Check existing database user with isAdmin=True
+            user = users_col.find_one({"email": email})
+            if user and user.get("isAdmin") and verify_password(password, user.get("password", "")):
+                admin_user = user
+
+        if not admin_user:
+            return Response(
+                {"error": "Invalid administrative credentials."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        token = generate_token(str(admin_user["_id"]))
+        return Response(
+            {
+                "message": "Administrative session authorized.",
+                "token": token,
+                "user": serialize_user(admin_user),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class AdminMeView(APIView):
+    def get(self, request):
+        is_ok, res = check_is_admin(request)
+        if not is_ok:
+            return res
+        return Response({"user": serialize_user(res)}, status=status.HTTP_200_OK)
 
 
 class AdminMetricsView(APIView):
