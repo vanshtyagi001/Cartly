@@ -11,6 +11,7 @@ import Checkout from './pages/Checkout';
 import Orders from './pages/Orders';
 import Login from './pages/Login';
 import Profile from './pages/Profile';
+import SellerStudio from './pages/SellerStudio';
 import CartDrawer from './components/CartDrawer';
 
 export default function App() {
@@ -29,6 +30,7 @@ export default function App() {
               <Route path="/orders" element={<Orders />} />
               <Route path="/login" element={<Login />} />
               <Route path="/profile" element={<Profile />} />
+              <Route path="/seller" element={<SellerStudio />} />
             </Routes>
             
             <Footer />

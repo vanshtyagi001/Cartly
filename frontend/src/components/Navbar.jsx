@@ -49,6 +49,9 @@ export default function Navbar() {
                   </div>
                   <Link to="/orders" onClick={() => setIsUserMenuOpen(false)} className="block px-4 py-2 text-xs text-stone-700 hover:bg-stone-50">Your Orders</Link>
                   <Link to="/profile" onClick={() => setIsUserMenuOpen(false)} className="block px-4 py-2 text-xs text-stone-700 hover:bg-stone-50">Profile & Address</Link>
+                  <Link to="/seller" onClick={() => setIsUserMenuOpen(false)} className="block px-4 py-2 text-xs text-stone-700 hover:bg-stone-50">
+                    {user?.isSeller ? "Seller Studio" : "Become a Seller"}
+                  </Link>
                   <button onClick={handleLogout} className="w-full text-left px-4 py-2 text-xs text-red-600 hover:bg-stone-50 border-t border-stone-100 mt-1">Sign Out</button>
                 </div>
               )}

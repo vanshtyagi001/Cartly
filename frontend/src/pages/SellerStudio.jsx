@@ -1,0 +1,761 @@
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+
+export default function SellerStudio() {
+  const { user, token, isAuthenticated, updateProfile } = useAuth();
+  const navigate = useNavigate();
+
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
+  const [activeTab, setActiveTab] = useState('inventory'); // 'inventory' | 'orders' | 'settings'
+  const [stats, setStats] = useState({
+    totalProducts: 0,
+    totalOrders: 0,
+    totalRevenue: '₹0.00',
+  });
+  const [products, setProducts] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Onboarding state
+  const [onboardForm, setOnboardForm] = useState({
+    storeName: user?.name ? `${user.name.split(' ')[0]}'s Campus Depot` : '',
+    campusLocation: user?.defaultAddress?.hostelBlock ? `${user.defaultAddress.hostelBlock}, Room ${user.defaultAddress.roomNumber}` : 'North Campus',
+    phone: user?.phone || '',
+    bio: '',
+  });
+  const [isOnboarding, setIsOnboarding] = useState(false);
+
+  // New Product Modal / Form State
+  const [isAddingProduct, setIsAddingProduct] = useState(false);
+  const [newProduct, setNewProduct] = useState({
+    name: '',
+    category: 'Hostel Essentials',
+    price: '',
+    img: '',
+    description: '',
+  });
+  const [isSavingProduct, setIsSavingProduct] = useState(false);
+  const [actionSuccess, setActionSuccess] = useState('');
+  const [actionError, setActionError] = useState('');
+
+  // Sample image presets for student sellers
+  const imagePresets = [
+    { label: 'Notebook', url: 'https://images.unsplash.com/photo-1512820790803-83ca734da794?q=80&w=800&auto=format&fit=crop' },
+    { label: 'Desk Lamp', url: 'https://images.unsplash.com/photo-1513506003901-1e6a229e2d15?q=80&w=800&auto=format&fit=crop' },
+    { label: 'Calculator', url: 'https://images.unsplash.com/photo-1574607407408-1e681c46041d?q=80&w=800&auto=format&fit=crop' },
+    { label: 'Pens Set', url: 'https://images.unsplash.com/photo-1580582932707-520aed937b7b?q=80&w=800&auto=format&fit=crop' },
+    { label: 'Backpack', url: 'https://images.unsplash.com/photo-1760715651666-c3e408bfdda7?auto=format&fit=crop&w=800&q=80' },
+    { label: 'Headphones', url: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?q=80&w=800&auto=format&fit=crop' },
+  ];
+
+  // Fetch Seller Dashboard Data
+  const loadSellerData = async () => {
+    if (!token || !user?.isSeller) {
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const headers = { Authorization: `Bearer ${token}` };
+
+      // Load stats
+      const statsRes = await fetch(`${API_URL}/api/seller/dashboard`, { headers });
+      if (statsRes.ok) {
+        const statsData = await statsRes.json();
+        setStats(statsData.stats || {});
+      }
+
+      // Load products
+      const prodsRes = await fetch(`${API_URL}/api/seller/products`, { headers });
+      if (prodsRes.ok) {
+        const prodsData = await prodsRes.json();
+        setProducts(prodsData || []);
+      }
+
+      // Load orders
+      const ordersRes = await fetch(`${API_URL}/api/seller/orders`, { headers });
+      if (ordersRes.ok) {
+        const ordersData = await ordersRes.json();
+        setOrders(ordersData || []);
+      }
+    } catch (err) {
+      console.error('Failed to load seller studio data:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadSellerData();
+  }, [token, user?.isSeller]);
+
+  // Handle Seller Onboarding
+  const handleOnboardSubmit = async (e) => {
+    e.preventDefault();
+    setActionError('');
+    setIsOnboarding(true);
+
+    try {
+      const res = await fetch(`${API_URL}/api/seller/onboard`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(onboardForm),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to onboard seller.');
+      }
+
+      // Update user in context
+      await updateProfile({
+        name: user.name,
+        phone: onboardForm.phone,
+      });
+
+      setActionSuccess(data.message || 'Store registered successfully!');
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+    } catch (err) {
+      setActionError(err.message);
+    } finally {
+      setIsOnboarding(false);
+    }
+  };
+
+  // Add New Product
+  const handleAddProductSubmit = async (e) => {
+    e.preventDefault();
+    setActionError('');
+    setIsSavingProduct(true);
+
+    try {
+      const res = await fetch(`${API_URL}/api/seller/products`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(newProduct),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to add product.');
+      }
+
+      setActionSuccess(data.message || 'Product listed successfully!');
+      setIsAddingProduct(false);
+      setNewProduct({
+        name: '',
+        category: 'Hostel Essentials',
+        price: '',
+        img: '',
+        description: '',
+      });
+      loadSellerData();
+      setTimeout(() => setActionSuccess(''), 4000);
+    } catch (err) {
+      setActionError(err.message);
+    } finally {
+      setIsSavingProduct(false);
+    }
+  };
+
+  // Delete Product
+  const handleDeleteProduct = async (productId) => {
+    if (!window.confirm('Are you sure you want to remove this item from your campus catalog?')) return;
+
+    try {
+      const res = await fetch(`${API_URL}/api/seller/products/${productId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (res.ok) {
+        setActionSuccess('Product removed from catalog.');
+        loadSellerData();
+        setTimeout(() => setActionSuccess(''), 3000);
+      }
+    } catch (err) {
+      console.error('Delete error:', err);
+    }
+  };
+
+  // Update Order Status
+  const handleStatusChange = async (orderId, newStatus) => {
+    try {
+      const res = await fetch(`${API_URL}/api/seller/orders/${orderId}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      if (res.ok) {
+        setActionSuccess(`Order #${orderId} updated to ${newStatus}.`);
+        loadSellerData();
+        setTimeout(() => setActionSuccess(''), 3000);
+      }
+    } catch (err) {
+      console.error('Status update error:', err);
+    }
+  };
+
+  // Require Auth
+  if (!isAuthenticated) {
+    return (
+      <main className="flex-1 bg-[#FAF9F6] border-t border-stone-200 py-24 px-6 flex items-center justify-center min-h-[calc(100vh-88px)]">
+        <div className="max-w-md w-full bg-white border border-stone-200 p-8 sm:p-12 text-center shadow-sm">
+          <span className="text-[10px] uppercase tracking-[0.25em] font-medium text-stone-400 block mb-3">
+            Cartly Seller Hub
+          </span>
+          <h1 className="text-3xl font-serif text-stone-900 tracking-tight mb-4">
+            Sign In to Seller Studio
+          </h1>
+          <p className="text-stone-500 text-xs leading-relaxed mb-8">
+            Access your campus listings, manage customer orders, and view student earnings.
+          </p>
+          <Link
+            to="/login"
+            state={{ from: { pathname: '/seller' } }}
+            className="inline-block w-full bg-stone-900 text-white text-xs uppercase tracking-[0.15em] font-medium py-4 hover:bg-black transition-colors"
+          >
+            Sign In
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
+  // ONBOARDING VIEW (If user is not yet a seller)
+  if (!user?.isSeller) {
+    return (
+      <main className="flex-1 bg-[#FAF9F6] border-t border-stone-200 py-16 lg:py-24 px-6 md:px-12 min-h-[calc(100vh-88px)]">
+        <div className="max-w-[760px] mx-auto">
+          
+          <div className="text-center mb-12">
+            <span className="text-[10px] uppercase tracking-[0.3em] font-medium text-stone-400 block mb-2">
+              Campus Marketplace
+            </span>
+            <h1 className="text-4xl md:text-5xl font-serif text-stone-900 tracking-tight mb-4">
+              Open Your Campus Store.
+            </h1>
+            <p className="text-stone-500 font-sans text-sm max-w-lg mx-auto leading-relaxed">
+              Start selling study aids, electronics, hostel gear, or handmade essentials directly to fellow students across campus. Zero listing fees.
+            </p>
+          </div>
+
+          {/* Perks Bar */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10 text-center">
+            <div className="p-5 bg-white border border-stone-200">
+              <span className="block font-serif text-stone-900 text-lg mb-1">0% Commission</span>
+              <span className="text-[11px] text-stone-500 font-sans">Keep 100% of your earnings on every campus order</span>
+            </div>
+            <div className="p-5 bg-white border border-stone-200">
+              <span className="block font-serif text-stone-900 text-lg mb-1">Hostel Delivery</span>
+              <span className="text-[11px] text-stone-500 font-sans">Direct handoff at your dorm block or campus pickup</span>
+            </div>
+            <div className="p-5 bg-white border border-stone-200">
+              <span className="block font-serif text-stone-900 text-lg mb-1">Direct Reach</span>
+              <span className="text-[11px] text-stone-500 font-sans">Reach students directly across campus and residence halls</span>
+            </div>
+          </div>
+
+          {/* Onboarding Form */}
+          <div className="bg-white border border-stone-200 p-8 sm:p-12 shadow-sm">
+            {actionError && (
+              <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-800 text-xs">
+                {actionError}
+              </div>
+            )}
+            {actionSuccess && (
+              <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs">
+                {actionSuccess}
+              </div>
+            )}
+
+            <form onSubmit={handleOnboardSubmit} className="space-y-6">
+              <div>
+                <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
+                  Store or Stall Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={onboardForm.storeName}
+                  onChange={(e) => setOnboardForm(prev => ({ ...prev, storeName: e.target.value }))}
+                  placeholder="e.g. Aarav's Dorm Essentials / Tech Hub"
+                  className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-3 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
+                  Campus Pickup / Hostel Location <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={onboardForm.campusLocation}
+                  onChange={(e) => setOnboardForm(prev => ({ ...prev, campusLocation: e.target.value }))}
+                  placeholder="e.g. Tagore Hostel, Room 304 (North Campus)"
+                  className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-3 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
+                  Seller Contact Mobile
+                </label>
+                <input
+                  type="tel"
+                  value={onboardForm.phone}
+                  onChange={(e) => setOnboardForm(prev => ({ ...prev, phone: e.target.value }))}
+                  placeholder="10-digit mobile number for order delivery coordination"
+                  className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-3 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
+                  Store Bio / What You Sell
+                </label>
+                <textarea
+                  rows={3}
+                  value={onboardForm.bio}
+                  onChange={(e) => setOnboardForm(prev => ({ ...prev, bio: e.target.value }))}
+                  placeholder="Tell campus buyers what essentials, gadgets, or gear you provide."
+                  className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-3 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={isOnboarding}
+                className="w-full bg-stone-900 text-white text-xs uppercase tracking-[0.15em] font-medium py-4 hover:bg-black transition-all flex items-center justify-center gap-2"
+              >
+                {isOnboarding ? 'Setting Up Your Store...' : 'Launch Campus Store'}
+              </button>
+            </form>
+          </div>
+
+        </div>
+      </main>
+    );
+  }
+
+  // ACTIVE SELLER STUDIO DASHBOARD
+  const sellerProfile = user?.sellerProfile || {};
+
+  return (
+    <main className="flex-1 bg-[#FAF9F6] border-t border-stone-200 py-12 lg:py-16 px-6 md:px-12 min-h-[calc(100vh-88px)]">
+      <div className="max-w-[1200px] mx-auto">
+        
+        {/* Studio Header */}
+        <div className="mb-10 pb-6 border-b border-stone-200 flex flex-col md:flex-row md:items-end justify-between gap-6">
+          <div>
+            <span className="text-[10px] uppercase tracking-[0.25em] font-medium text-stone-400 block mb-2">
+              Cartly Seller Hub
+            </span>
+            <h1 className="text-3xl md:text-5xl font-serif text-stone-900 tracking-tight">
+              {sellerProfile.storeName || "Your Campus Store"}
+            </h1>
+            <p className="text-stone-500 text-xs mt-1">
+              {sellerProfile.campusLocation || "Main Campus"}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setIsAddingProduct(true)}
+              className="bg-stone-900 text-white text-xs uppercase tracking-[0.15em] font-medium py-3.5 px-6 hover:bg-black transition-colors flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              <span>Add New Item</span>
+            </button>
+            <Link
+              to="/shop"
+              className="text-xs uppercase tracking-[0.15em] font-medium text-stone-600 hover:text-stone-900 border border-stone-200 bg-white py-3.5 px-5 transition-colors"
+            >
+              View Shop
+            </Link>
+          </div>
+        </div>
+
+        {/* Global Feedback Banner */}
+        {actionSuccess && (
+          <div className="mb-8 p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2">
+            <svg className="w-4 h-4 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            <span>{actionSuccess}</span>
+          </div>
+        )}
+
+        {/* Metric Cards Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-12">
+          <div className="bg-white border border-stone-200 p-6 shadow-sm">
+            <span className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold block mb-2">
+              Active Listings
+            </span>
+            <div className="flex items-baseline justify-between">
+              <span className="text-3xl font-serif text-stone-900">{stats.totalProducts || products.length}</span>
+              <span className="text-[11px] text-stone-500">Live in catalog</span>
+            </div>
+          </div>
+
+          <div className="bg-white border border-stone-200 p-6 shadow-sm">
+            <span className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold block mb-2">
+              Campus Orders Received
+            </span>
+            <div className="flex items-baseline justify-between">
+              <span className="text-3xl font-serif text-stone-900">{stats.totalOrders || orders.length}</span>
+              <span className="text-[11px] text-stone-500">To fulfill</span>
+            </div>
+          </div>
+
+          <div className="bg-white border border-stone-200 p-6 shadow-sm">
+            <span className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold block mb-2">
+              Total Student Sales
+            </span>
+            <div className="flex items-baseline justify-between">
+              <span className="text-3xl font-serif text-stone-900">{stats.totalRevenue || "₹0.00"}</span>
+              <span className="text-[11px] text-stone-500 font-sans">Cash on Delivery</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Navigation Tabs */}
+        <div className="flex border-b border-stone-200 mb-8 space-x-8">
+          <button
+            onClick={() => setActiveTab('inventory')}
+            className={`pb-4 text-xs uppercase tracking-widest font-medium transition-colors relative ${
+              activeTab === 'inventory' ? 'text-stone-900 font-semibold' : 'text-stone-400 hover:text-stone-600'
+            }`}
+          >
+            My Catalog & Inventory ({products.length})
+            {activeTab === 'inventory' && (
+              <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-stone-900" />
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab('orders')}
+            className={`pb-4 text-xs uppercase tracking-widest font-medium transition-colors relative ${
+              activeTab === 'orders' ? 'text-stone-900 font-semibold' : 'text-stone-400 hover:text-stone-600'
+            }`}
+          >
+            Orders to Fulfill ({orders.length})
+            {activeTab === 'orders' && (
+              <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-stone-900" />
+            )}
+          </button>
+        </div>
+
+        {/* TAB 1: INVENTORY & LISTINGS */}
+        {activeTab === 'inventory' && (
+          <div className="space-y-8">
+            
+            {/* Modal / Slide-down to Add New Product */}
+            {isAddingProduct && (
+              <div className="bg-white border border-stone-200 p-8 shadow-md transition-all mb-8">
+                <div className="flex items-center justify-between pb-4 mb-6 border-b border-stone-200">
+                  <h3 className="font-serif text-2xl text-stone-900 tracking-tight">
+                    Add New Campus Essential
+                  </h3>
+                  <button
+                    onClick={() => setIsAddingProduct(false)}
+                    className="text-stone-400 hover:text-stone-900 text-sm"
+                  >
+                    ✕ Close
+                  </button>
+                </div>
+
+                {actionError && (
+                  <div className="mb-4 p-3 bg-red-50 text-red-800 text-xs border border-red-200">
+                    {actionError}
+                  </div>
+                )}
+
+                <form onSubmit={handleAddProductSubmit} className="space-y-5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
+                        Product / Item Name *
+                      </label>
+                      <input
+                        type="text"
+                        value={newProduct.name}
+                        onChange={(e) => setNewProduct(prev => ({ ...prev, name: e.target.value }))}
+                        placeholder="e.g. Casio Scientific Calculator / Laundry Rack"
+                        className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-2.5 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
+                        Category *
+                      </label>
+                      <select
+                        value={newProduct.category}
+                        onChange={(e) => setNewProduct(prev => ({ ...prev, category: e.target.value }))}
+                        className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-2.5 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none"
+                      >
+                        <option value="Hostel Essentials">Hostel Essentials</option>
+                        <option value="Electronics">Electronics</option>
+                        <option value="Stationery">Stationery</option>
+                        <option value="Trekking Essentials">Trekking Essentials</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
+                        Price in Rupees (₹) *
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={newProduct.price}
+                        onChange={(e) => setNewProduct(prev => ({ ...prev, price: e.target.value }))}
+                        placeholder="e.g. 299"
+                        className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-2.5 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
+                        Image URL (or pick sample below)
+                      </label>
+                      <input
+                        type="url"
+                        value={newProduct.img}
+                        onChange={(e) => setNewProduct(prev => ({ ...prev, img: e.target.value }))}
+                        placeholder="https://..."
+                        className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-2.5 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Image Presets Selector */}
+                  <div>
+                    <span className="block text-[9px] uppercase tracking-widest text-stone-400 font-semibold mb-2">
+                      Quick Sample Photos:
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {imagePresets.map((preset, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => setNewProduct(prev => ({ ...prev, img: preset.url }))}
+                          className={`text-[10px] uppercase tracking-wider px-3 py-1.5 border transition-colors ${
+                            newProduct.img === preset.url
+                              ? 'border-stone-900 bg-stone-900 text-white'
+                              : 'border-stone-200 bg-[#FAF9F6] text-stone-600 hover:border-stone-400'
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
+                      Description / Item Condition
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={newProduct.description}
+                      onChange={(e) => setNewProduct(prev => ({ ...prev, description: e.target.value }))}
+                      placeholder="e.g. Brand new, unboxed, ready for immediate hostel pickup."
+                      className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-2.5 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-3">
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingProduct(false)}
+                      className="px-6 py-2.5 text-xs uppercase tracking-widest text-stone-500 hover:text-stone-900"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSavingProduct}
+                      className="bg-stone-900 text-white text-xs uppercase tracking-[0.15em] font-medium py-2.5 px-8 hover:bg-black transition-colors"
+                    >
+                      {isSavingProduct ? 'Publishing...' : 'Publish to Catalog'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {/* Product List */}
+            {products.length === 0 ? (
+              <div className="bg-white border border-stone-200 p-12 text-center">
+                <span className="text-stone-400 font-serif italic text-lg block mb-4">
+                  No items listed yet in your store.
+                </span>
+                <button
+                  onClick={() => setIsAddingProduct(true)}
+                  className="bg-stone-900 text-white text-xs uppercase tracking-[0.15em] font-medium py-3 px-8 hover:bg-black transition-colors"
+                >
+                  List Your First Item
+                </button>
+              </div>
+            ) : (
+              <div className="bg-white border border-stone-200 divide-y divide-stone-200 shadow-sm">
+                <div className="hidden sm:grid grid-cols-12 gap-4 px-6 py-4 text-[10px] uppercase tracking-widest font-semibold text-stone-400 border-b border-stone-200">
+                  <div className="col-span-6">Item</div>
+                  <div className="col-span-2">Category</div>
+                  <div className="col-span-2">Price</div>
+                  <div className="col-span-2 text-right">Actions</div>
+                </div>
+
+                {products.map((item) => (
+                  <div key={item.id} className="grid grid-cols-1 sm:grid-cols-12 gap-4 p-6 items-center group">
+                    <div className="sm:col-span-6 flex items-center gap-4">
+                      <div className="w-14 h-16 bg-[#FAF9F6] border border-stone-200 overflow-hidden shrink-0">
+                        <img src={item.img} alt={item.name} className="w-full h-full object-cover mix-blend-multiply" />
+                      </div>
+                      <div>
+                        <Link to={`/product/${item.id}`} className="font-serif text-stone-900 text-base hover:underline block">
+                          {item.name}
+                        </Link>
+                        <p className="text-stone-400 text-xs line-clamp-1">{item.description}</p>
+                      </div>
+                    </div>
+
+                    <div className="sm:col-span-2 text-xs font-sans text-stone-600">
+                      {item.category}
+                    </div>
+
+                    <div className="sm:col-span-2 text-base font-serif text-stone-900 font-medium">
+                      {item.price}
+                    </div>
+
+                    <div className="sm:col-span-2 flex items-center justify-end gap-3">
+                      <Link
+                        to={`/product/${item.id}`}
+                        className="text-[10px] uppercase tracking-widest text-stone-500 hover:text-stone-900"
+                      >
+                        View
+                      </Link>
+                      <button
+                        onClick={() => handleDeleteProduct(item.id)}
+                        className="text-[10px] uppercase tracking-widest text-red-600 hover:text-red-900"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+          </div>
+        )}
+
+        {/* TAB 2: ORDERS TO FULFILL */}
+        {activeTab === 'orders' && (
+          <div className="space-y-6">
+            {orders.length === 0 ? (
+              <div className="bg-white border border-stone-200 p-12 text-center">
+                <span className="text-stone-400 font-serif italic text-lg block mb-2">
+                  No customer orders received yet.
+                </span>
+                <p className="text-stone-500 text-xs">
+                  When students order your listed items, their delivery requests will appear here.
+                </p>
+              </div>
+            ) : (
+              orders.map((order) => (
+                <div key={order.id} className="bg-white border border-stone-200 p-6 md:p-8 shadow-sm">
+                  
+                  {/* Order Top Bar */}
+                  <div className="flex flex-wrap items-center justify-between pb-6 mb-6 border-b border-stone-200 gap-4">
+                    <div>
+                      <span className="text-[9px] uppercase tracking-widest text-stone-400 font-semibold block mb-1">
+                        Order #{order.id} • {order.date}
+                      </span>
+                      <p className="font-serif text-lg text-stone-900 font-medium">
+                        Total Value: {order.total} (Cash on Delivery)
+                      </p>
+                    </div>
+
+                    {/* Status updater dropdown */}
+                    <div className="flex items-center gap-3">
+                      <span className="text-[10px] uppercase tracking-widest text-stone-500 font-medium">
+                        Fulfillment Status:
+                      </span>
+                      <select
+                        value={order.status || 'Confirmed'}
+                        onChange={(e) => handleStatusChange(order.id, e.target.value)}
+                        className="bg-[#FAF9F6] border border-stone-200 text-xs font-medium text-stone-900 px-3 py-1.5 focus:outline-none focus:border-stone-900"
+                      >
+                        <option value="Confirmed">Confirmed</option>
+                        <option value="Preparing">Preparing</option>
+                        <option value="Out for Delivery">Out for Delivery</option>
+                        <option value="Delivered">Delivered</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Customer Hostel Destination */}
+                  <div className="mb-6 p-4 bg-[#FAF9F6] border border-stone-200 text-xs">
+                    <span className="text-[9px] uppercase tracking-widest text-stone-400 font-semibold block mb-1.5">
+                      Hostel Delivery Details
+                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-stone-700">
+                      <div><strong className="text-stone-900">Student:</strong> {order.shippingAddress?.fullName || order.userName}</div>
+                      <div><strong className="text-stone-900">Hostel & Room:</strong> {order.shippingAddress?.hostelBlock}, Room {order.shippingAddress?.roomNumber}</div>
+                      <div><strong className="text-stone-900">Phone:</strong> {order.shippingAddress?.phone}</div>
+                    </div>
+                  </div>
+
+                  {/* Items List */}
+                  <div className="divide-y divide-stone-100">
+                    {order.items?.map((item, idx) => (
+                      <div key={idx} className="py-3 flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-4">
+                          {item.img && (
+                            <div className="w-10 h-12 bg-stone-100 border border-stone-200 overflow-hidden shrink-0">
+                              <img src={item.img} alt={item.name} className="w-full h-full object-cover mix-blend-multiply" />
+                            </div>
+                          )}
+                          <div>
+                            <p className="font-serif text-stone-900 text-sm">{item.name}</p>
+                            <p className="text-stone-400 text-[11px]">Qty: {item.quantity} × {item.price}</p>
+                          </div>
+                        </div>
+                        <span className="font-sans font-medium text-stone-900">{item.price}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+      </div>
+    </main>
+  );
+}
