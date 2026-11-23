@@ -39,6 +39,7 @@ export default function AdminPanel() {
   const [productSearch, setProductSearch] = useState('');
   const [notification, setNotification] = useState('');
   const [isAddingProduct, setIsAddingProduct] = useState(false);
+  const [addProductError, setAddProductError] = useState('');
   const [newProduct, setNewProduct] = useState({
     name: '',
     category: 'Hostel Essentials',
@@ -47,6 +48,15 @@ export default function AdminPanel() {
     description: '',
   });
   const [isSubmittingProduct, setIsSubmittingProduct] = useState(false);
+
+  const adminImagePresets = [
+    { label: 'Notebook', url: 'https://images.unsplash.com/photo-1512820790803-83ca734da794?q=80&w=800&auto=format&fit=crop' },
+    { label: 'Desk Lamp', url: 'https://images.unsplash.com/photo-1513506003901-1e6a229e2d15?q=80&w=800&auto=format&fit=crop' },
+    { label: 'Calculator', url: 'https://images.unsplash.com/photo-1574607407408-1e681c46041d?q=80&w=800&auto=format&fit=crop' },
+    { label: 'Pens Set', url: 'https://images.unsplash.com/photo-1580582932707-520aed937b7b?q=80&w=800&auto=format&fit=crop' },
+    { label: 'Backpack', url: 'https://images.unsplash.com/photo-1760715651666-c3e408bfdda7?auto=format&fit=crop&w=800&q=80' },
+    { label: 'Headphones', url: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?q=80&w=800&auto=format&fit=crop' },
+  ];
 
   // Validate active token on mount
   useEffect(() => {
@@ -198,6 +208,19 @@ export default function AdminPanel() {
   // Create new catalog product
   const handleCreateProduct = async (e) => {
     e.preventDefault();
+    setAddProductError('');
+
+    if (!newProduct.name.trim()) {
+      setAddProductError('Product name is required.');
+      return;
+    }
+
+    const parsedPrice = parseFloat(newProduct.price);
+    if (isNaN(parsedPrice) || parsedPrice <= 0) {
+      setAddProductError('Please enter a valid price in rupees (greater than 0).');
+      return;
+    }
+
     setIsSubmittingProduct(true);
     try {
       const res = await fetch(`${API_URL}/api/admin/products`, {
@@ -206,18 +229,25 @@ export default function AdminPanel() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${adminToken}`,
         },
-        body: JSON.stringify(newProduct),
+        body: JSON.stringify({
+          name: newProduct.name.trim(),
+          category: newProduct.category,
+          price: parsedPrice,
+          img: newProduct.img.trim(),
+          description: newProduct.description.trim(),
+        }),
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to add product');
+      if (!res.ok) throw new Error(data.error || 'Failed to add product to catalog.');
 
-      showNotice(`'${newProduct.name}' added to platform catalog.`);
+      showNotice(`'${newProduct.name}' successfully added to platform catalog.`);
       setIsAddingProduct(false);
       setNewProduct({ name: '', category: 'Hostel Essentials', price: '', img: '', description: '' });
+      setActiveTab('catalog');
       fetchAdminData();
     } catch (err) {
-      alert(err.message);
+      setAddProductError(err.message || 'Error publishing product.');
     } finally {
       setIsSubmittingProduct(false);
     }
@@ -307,7 +337,128 @@ export default function AdminPanel() {
   );
 
   return (
-    <main className="flex-1 bg-[#FAF9F6] border-t border-stone-200 py-12 lg:py-16 px-6 md:px-12 min-h-[calc(100vh-88px)]">
+    <main className="flex-1 bg-[#FAF9F6] border-t border-stone-200 py-12 lg:py-16 px-6 md:px-12 min-h-[calc(100vh-88px)] relative">
+      {/* Modal to Add New Product - Accessible globally from any tab */}
+      {isAddingProduct && (
+        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white border border-stone-200 p-6 sm:p-8 shadow-2xl max-w-2xl w-full my-8 max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-4 mb-6 border-b border-stone-200">
+              <div>
+                <span className="text-[10px] uppercase tracking-[0.2em] font-medium text-stone-400 block mb-1">
+                  Catalog Management
+                </span>
+                <h3 className="font-serif text-2xl text-stone-900 tracking-tight">
+                  Add Item to Official Catalog
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setIsAddingProduct(false); setAddProductError(''); }}
+                className="text-stone-400 hover:text-stone-900 text-sm p-1.5 hover:bg-stone-100 transition-colors"
+                aria-label="Close modal"
+              >
+                ✕ Close
+              </button>
+            </div>
+
+            {addProductError && (
+              <div className="mb-5 p-3 bg-red-50 border border-red-200 text-red-700 text-xs">
+                {addProductError}
+              </div>
+            )}
+
+            <form onSubmit={handleCreateProduct} className="space-y-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <div className="sm:col-span-2">
+                  <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
+                    Product Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={newProduct.name}
+                    onChange={(e) => setNewProduct(prev => ({ ...prev, name: e.target.value }))}
+                    placeholder="e.g. Memory Foam Mattress Topper"
+                    className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-2.5 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
+                    Category *
+                  </label>
+                  <select
+                    value={newProduct.category}
+                    onChange={(e) => setNewProduct(prev => ({ ...prev, category: e.target.value }))}
+                    className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-2.5 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none"
+                  >
+                    <option value="Hostel Essentials">Hostel Essentials</option>
+                    <option value="Electronics">Electronics</option>
+                    <option value="Stationery">Stationery</option>
+                    <option value="Trekking Essentials">Trekking Essentials</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
+                    Price (₹) *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="any"
+                    value={newProduct.price}
+                    onChange={(e) => setNewProduct(prev => ({ ...prev, price: e.target.value }))}
+                    placeholder="799"
+                    className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-2.5 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none"
+                    required
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <ImageUploadInput
+                    value={newProduct.img}
+                    onChange={(val) => setNewProduct(prev => ({ ...prev, img: val }))}
+                    presets={adminImagePresets}
+                    label="Product Photo"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
+                  Description
+                </label>
+                <textarea
+                  rows={2}
+                  value={newProduct.description}
+                  onChange={(e) => setNewProduct(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="Product details for student catalog."
+                  className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-2.5 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-stone-100">
+                <button
+                  type="button"
+                  onClick={() => { setIsAddingProduct(false); setAddProductError(''); }}
+                  className="px-6 py-2.5 text-xs uppercase tracking-widest text-stone-500 hover:text-stone-900 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingProduct}
+                  className="bg-stone-900 text-white text-xs uppercase tracking-[0.15em] font-medium py-2.5 px-8 hover:bg-black transition-colors disabled:opacity-50"
+                >
+                  {isSubmittingProduct ? 'Saving...' : 'Add to Catalog'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-[1300px] mx-auto">
         
         {/* Admin Header */}
@@ -574,110 +725,8 @@ export default function AdminPanel() {
         {/* TAB 3: CATALOG CONTROL */}
         {activeTab === 'catalog' && (
           <div className="space-y-6">
-            
-            {/* Modal to Add New Product */}
-            {isAddingProduct && (
-              <div className="bg-white border border-stone-200 p-8 shadow-md mb-8">
-                <div className="flex items-center justify-between pb-4 mb-6 border-b border-stone-200">
-                  <h3 className="font-serif text-2xl text-stone-900 tracking-tight">
-                    Add Item to Official Catalog
-                  </h3>
-                  <button onClick={() => setIsAddingProduct(false)} className="text-stone-400 hover:text-stone-900 text-sm">
-                    ✕ Close
-                  </button>
-                </div>
-
-                <form onSubmit={handleCreateProduct} className="space-y-5">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                    <div className="sm:col-span-2">
-                      <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
-                        Product Name *
-                      </label>
-                      <input
-                        type="text"
-                        value={newProduct.name}
-                        onChange={(e) => setNewProduct(prev => ({ ...prev, name: e.target.value }))}
-                        placeholder="e.g. Memory Foam Mattress Topper"
-                        className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-2.5 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none"
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
-                        Category *
-                      </label>
-                      <select
-                        value={newProduct.category}
-                        onChange={(e) => setNewProduct(prev => ({ ...prev, category: e.target.value }))}
-                        className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-2.5 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none"
-                      >
-                        <option value="Hostel Essentials">Hostel Essentials</option>
-                        <option value="Electronics">Electronics</option>
-                        <option value="Stationery">Stationery</option>
-                        <option value="Trekking Essentials">Trekking Essentials</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
-                        Price (₹) *
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={newProduct.price}
-                        onChange={(e) => setNewProduct(prev => ({ ...prev, price: e.target.value }))}
-                        placeholder="799"
-                        className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-2.5 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none"
-                        required
-                      />
-                    </div>
-
-                    <div className="sm:col-span-2">
-                      <ImageUploadInput
-                        value={newProduct.img}
-                        onChange={(val) => setNewProduct(prev => ({ ...prev, img: val }))}
-                        label="Product Photo"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
-                      Description
-                    </label>
-                    <textarea
-                      rows={2}
-                      value={newProduct.description}
-                      onChange={(e) => setNewProduct(prev => ({ ...prev, description: e.target.value }))}
-                      placeholder="Product details for student catalog."
-                      className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-2.5 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none"
-                    />
-                  </div>
-
-                  <div className="flex justify-end gap-3 pt-3">
-                    <button
-                      type="button"
-                      onClick={() => setIsAddingProduct(false)}
-                      className="px-6 py-2.5 text-xs uppercase tracking-widest text-stone-500"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={isSubmittingProduct}
-                      className="bg-stone-900 text-white text-xs uppercase tracking-[0.15em] font-medium py-2.5 px-8 hover:bg-black transition-colors"
-                    >
-                      {isSubmittingProduct ? 'Saving...' : 'Add to Catalog'}
-                    </button>
-                  </div>
-                </form>
-              </div>
-            )}
-
-            {/* Catalog search bar */}
-            <div className="flex justify-between items-center bg-white border border-stone-200 p-4">
+            {/* Catalog search bar & Actions */}
+            <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 bg-white border border-stone-200 p-4">
               <input
                 type="text"
                 placeholder="Search products by title or category..."
@@ -685,9 +734,18 @@ export default function AdminPanel() {
                 onChange={(e) => setProductSearch(e.target.value)}
                 className="w-full sm:w-96 bg-[#FAF9F6] border border-stone-200 px-4 py-2 text-xs text-stone-900 focus:outline-none focus:border-stone-900"
               />
-              <span className="text-xs text-stone-400">
-                {filteredProducts.length} items
-              </span>
+              <div className="flex items-center justify-between sm:justify-end gap-4">
+                <span className="text-xs text-stone-400">
+                  {filteredProducts.length} items
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsAddingProduct(true)}
+                  className="bg-stone-900 text-white text-[10px] uppercase tracking-widest font-medium py-2 px-4 hover:bg-black transition-colors shrink-0"
+                >
+                  + Add Item
+                </button>
+              </div>
             </div>
 
             {/* Products Table */}
