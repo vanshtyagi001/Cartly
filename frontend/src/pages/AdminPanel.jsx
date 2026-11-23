@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import ImageUploadInput from '../components/ImageUploadInput';
 
 export default function AdminPanel() {
   const { user, token, isAuthenticated } = useAuth();
@@ -490,7 +491,7 @@ export default function AdminPanel() {
 
                 <form onSubmit={handleCreateProduct} className="space-y-5">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                    <div>
+                    <div className="sm:col-span-2">
                       <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
                         Product Name *
                       </label>
@@ -535,16 +536,11 @@ export default function AdminPanel() {
                       />
                     </div>
 
-                    <div>
-                      <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
-                        Image URL
-                      </label>
-                      <input
-                        type="url"
+                    <div className="sm:col-span-2">
+                      <ImageUploadInput
                         value={newProduct.img}
-                        onChange={(e) => setNewProduct(prev => ({ ...prev, img: e.target.value }))}
-                        placeholder="https://..."
-                        className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-2.5 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none"
+                        onChange={(val) => setNewProduct(prev => ({ ...prev, img: val }))}
+                        label="Product Photo"
                       />
                     </div>
                   </div>

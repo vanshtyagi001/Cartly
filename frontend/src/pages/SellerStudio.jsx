@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import ImageUploadInput from '../components/ImageUploadInput';
 
 export default function SellerStudio() {
   const { user, token, isAuthenticated, updateProfile } = useAuth();
@@ -491,7 +492,7 @@ export default function SellerStudio() {
 
                 <form onSubmit={handleAddProductSubmit} className="space-y-5">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                    <div>
+                    <div className="sm:col-span-2">
                       <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
                         Product / Item Name *
                       </label>
@@ -536,40 +537,13 @@ export default function SellerStudio() {
                       />
                     </div>
 
-                    <div>
-                      <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
-                        Image URL (or pick sample below)
-                      </label>
-                      <input
-                        type="url"
+                    <div className="sm:col-span-2">
+                      <ImageUploadInput
                         value={newProduct.img}
-                        onChange={(e) => setNewProduct(prev => ({ ...prev, img: e.target.value }))}
-                        placeholder="https://..."
-                        className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-2.5 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none"
+                        onChange={(val) => setNewProduct(prev => ({ ...prev, img: val }))}
+                        presets={imagePresets}
+                        label="Product Photo"
                       />
-                    </div>
-                  </div>
-
-                  {/* Image Presets Selector */}
-                  <div>
-                    <span className="block text-[9px] uppercase tracking-widest text-stone-400 font-semibold mb-2">
-                      Quick Sample Photos:
-                    </span>
-                    <div className="flex flex-wrap gap-2">
-                      {imagePresets.map((preset, idx) => (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => setNewProduct(prev => ({ ...prev, img: preset.url }))}
-                          className={`text-[10px] uppercase tracking-wider px-3 py-1.5 border transition-colors ${
-                            newProduct.img === preset.url
-                              ? 'border-stone-900 bg-stone-900 text-white'
-                              : 'border-stone-200 bg-[#FAF9F6] text-stone-600 hover:border-stone-400'
-                          }`}
-                        >
-                          {preset.label}
-                        </button>
-                      ))}
                     </div>
                   </div>
 
