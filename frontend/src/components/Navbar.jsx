@@ -1,10 +1,19 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
+import { useAuth } from '../context/AuthContext';
 
 export default function Navbar() {
   const { totalItems, setIsCartOpen } = useCart();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { user, logout } = useAuth();
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    setIsUserMenuOpen(false);
+    navigate('/');
+  };
 
   return (
     <header className="sticky top-0 z-40 bg-[#FAF9F6]/90 backdrop-blur-md border-b border-stone-200">
@@ -21,9 +30,36 @@ export default function Navbar() {
         </div>
 
         <div className="flex items-center gap-6">
+          {user ? (
+            <div className="relative">
+              <button
+                onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                className="flex items-center gap-2 text-stone-800 hover:text-stone-950 transition-colors"
+              >
+                <div className="w-8 h-8 rounded-full bg-stone-200 text-stone-800 flex items-center justify-center font-medium text-xs">
+                  {user.name ? user.name[0].toUpperCase() : 'U'}
+                </div>
+              </button>
+
+              {isUserMenuOpen && (
+                <div className="absolute right-0 top-[calc(100%+0.75rem)] w-56 bg-white border border-stone-200 shadow-xl py-2 z-50">
+                  <div className="px-4 py-2 border-b border-stone-100 mb-1">
+                    <p className="text-xs font-medium text-stone-900 truncate">{user.name}</p>
+                    <p className="text-[10px] text-stone-400 truncate">{user.email}</p>
+                  </div>
+                  <Link to="/orders" onClick={() => setIsUserMenuOpen(false)} className="block px-4 py-2 text-xs text-stone-700 hover:bg-stone-50">Your Orders</Link>
+                  <Link to="/profile" onClick={() => setIsUserMenuOpen(false)} className="block px-4 py-2 text-xs text-stone-700 hover:bg-stone-50">Profile & Address</Link>
+                  <button onClick={handleLogout} className="w-full text-left px-4 py-2 text-xs text-red-600 hover:bg-stone-50 border-t border-stone-100 mt-1">Sign Out</button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <Link to="/login" className="text-xs uppercase tracking-widest text-stone-700 hover:text-stone-950 font-medium">Sign In</Link>
+          )}
+
           <button
             onClick={() => setIsCartOpen(true)}
-            className="flex items-center gap-2 text-stone-800 hover:text-stone-950 transition-colors group"
+            className="flex items-center gap-2 text-stone-800 hover:text-stone-950 transition-colors"
             aria-label="Shopping Cart"
           >
             <span className="text-xs uppercase tracking-widest font-medium hidden sm:inline-block">Bag</span>
