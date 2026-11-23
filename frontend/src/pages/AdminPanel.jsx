@@ -37,10 +37,15 @@ export default function AdminPanel() {
   // Filters & State
   const [orderSearch, setOrderSearch] = useState('');
   const [productSearch, setProductSearch] = useState('');
+  const [userFilter, setUserFilter] = useState('all'); // 'all' | 'pending' | 'approved' | 'suspended' | 'buyers'
   const [notification, setNotification] = useState('');
   const [isAddingProduct, setIsAddingProduct] = useState(false);
   const [addProductError, setAddProductError] = useState('');
   const [selectedAdminOrder, setSelectedAdminOrder] = useState(null);
+  const [sellerActionReason, setSellerActionReason] = useState('');
+  const [activeSellerActionUser, setActiveSellerActionUser] = useState(null);
+  const [pendingActionType, setPendingActionType] = useState('');
+  const [isProcessingSellerAction, setIsProcessingSellerAction] = useState(false);
   const [catalogViewMode, setCatalogViewMode] = useState('tiles'); // 'tiles' | 'table'
   const [catalogPage, setCatalogPage] = useState(1);
   const [catalogPageSize, setCatalogPageSize] = useState(8);
@@ -207,6 +212,52 @@ export default function AdminPanel() {
       }
     } catch (err) {
       console.error('Delete product failed:', err);
+    }
+  };
+
+  // Update seller approval status (Approve, Suspend, Cancel/Reject)
+  const handleSellerStatusChange = async (userId, newStatus, reason = '') => {
+    setIsProcessingSellerAction(true);
+    try {
+      const res = await fetch(`${API_URL}/api/admin/sellers/${userId}/status`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ status: newStatus, reason }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to update seller status.');
+      }
+
+      showNotice(data.message || `Seller status updated to ${newStatus}.`);
+      setActiveSellerActionUser(null);
+      setPendingActionType('');
+      setSellerActionReason('');
+      fetchAdminData();
+    } catch (err) {
+      showNotice(err.message || 'Error executing seller status change.');
+    } finally {
+      setIsProcessingSellerAction(false);
+    }
+  };
+
+  // Toggle user admin role
+  const handleToggleAdmin = async (userId) => {
+    try {
+      const res = await fetch(`${API_URL}/api/admin/users/${userId}/toggle-admin`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      if (res.ok) {
+        showNotice('User administrative permission updated.');
+        fetchAdminData();
+      }
+    } catch (err) {
+      console.error('Toggle admin failed:', err);
     }
   };
 
@@ -780,6 +831,11 @@ export default function AdminPanel() {
             }`}
           >
             Accounts & Sellers ({users.length})
+            {users.filter(u => (u.sellerStatus || '').toLowerCase() === 'pending').length > 0 && (
+              <span className="ml-2 px-1.5 py-0.5 text-[9px] bg-amber-500 text-white font-bold rounded-full">
+                {users.filter(u => (u.sellerStatus || '').toLowerCase() === 'pending').length}
+              </span>
+            )}
             {activeTab === 'users' && <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-stone-900" />}
           </button>
         </div>
@@ -1238,68 +1294,367 @@ export default function AdminPanel() {
           </div>
         )}
 
-        {/* TAB 4: USERS & SELLERS */}
-        {activeTab === 'users' && (
-          <div className="space-y-6">
-            <div className="bg-white border border-stone-200 shadow-sm overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="border-b border-stone-200 bg-[#FAF9F6] text-[10px] uppercase tracking-widest text-stone-400 font-semibold">
-                    <th className="p-4">Student Name</th>
-                    <th className="p-4">Email</th>
-                    <th className="p-4">Account Type</th>
-                    <th className="p-4">Hostel / Store Details</th>
-                    <th className="p-4 text-right">Admin Role</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-stone-100">
-                  {users.map((u) => (
-                    <tr key={u.id} className="hover:bg-stone-50/50 transition-colors">
-                      <td className="p-4 font-medium text-stone-900 flex items-center gap-3">
-                        <div className="w-7 h-7 rounded-full bg-stone-900 text-white flex items-center justify-center font-serif text-xs">
-                          {u.name ? u.name.charAt(0).toUpperCase() : 'U'}
-                        </div>
-                        <span>{u.name}</span>
-                      </td>
-                      <td className="p-4 text-stone-600">{u.email}</td>
-                      <td className="p-4">
-                        {u.isSeller ? (
-                          <span className="text-[10px] uppercase tracking-wider bg-stone-100 text-stone-800 px-2 py-0.5 font-medium">
-                            Campus Seller
-                          </span>
-                        ) : (
-                          <span className="text-[10px] uppercase tracking-wider text-stone-400">
-                            Student Buyer
-                          </span>
-                        )}
-                      </td>
-                      <td className="p-4 text-stone-500">
-                        {u.sellerProfile?.storeName ? (
-                          <span>{u.sellerProfile.storeName} ({u.sellerProfile.campusLocation})</span>
-                        ) : u.defaultAddress?.hostelBlock ? (
-                          <span>{u.defaultAddress.hostelBlock}, Room {u.defaultAddress.roomNumber}</span>
-                        ) : (
-                          <span>Standard Account</span>
-                        )}
-                      </td>
-                      <td className="p-4 text-right">
-                        {u.isAdmin ? (
-                          <span className="text-[10px] uppercase tracking-wider text-emerald-800 font-semibold">
-                            Admin Granted
-                          </span>
-                        ) : (
-                          <span className="text-[10px] uppercase tracking-wider text-stone-400">
-                            User
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+        {/* Action Confirmation Modal for Seller Status Changes (Suspend / Cancel / Reject) */}
+        {activeSellerActionUser && (
+          <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+            <div className="bg-white border border-stone-200 p-6 sm:p-8 shadow-2xl max-w-lg w-full my-8 animate-in fade-in zoom-in-95 duration-150">
+              <span className="text-[10px] uppercase tracking-[0.25em] text-stone-400 font-semibold block mb-2">
+                Seller Account Enforcement
+              </span>
+              <h2 className="text-xl sm:text-2xl font-serif text-stone-900 tracking-tight mb-2">
+                {pendingActionType === 'suspend' && 'Suspend Seller Account'}
+                {pendingActionType === 'reject' && 'Cancel / Reject Seller Application'}
+                {pendingActionType === 'approve' && 'Approve Seller Account'}
+                {pendingActionType === 'none' && 'Revoke Seller Privileges'}
+              </h2>
+              <p className="text-xs text-stone-600 mb-5 leading-relaxed">
+                Target Account: <strong className="text-stone-900">{activeSellerActionUser.name}</strong> ({activeSellerActionUser.email})<br />
+                Store: <span className="font-medium text-stone-800">{activeSellerActionUser.sellerProfile?.storeName || 'Campus Store'}</span>
+              </p>
+
+              {(pendingActionType === 'suspend' || pendingActionType === 'reject') && (
+                <div className="mb-5">
+                  <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
+                    Reason or Notice to Student (Optional)
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={sellerActionReason}
+                    onChange={(e) => setSellerActionReason(e.target.value)}
+                    placeholder="e.g. Incomplete hostel verification or policy non-compliance."
+                    className="w-full bg-[#FAF9F6] border border-stone-200 px-3.5 py-2.5 text-stone-900 text-xs focus:border-stone-900 focus:bg-white focus:outline-none"
+                  />
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-stone-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveSellerActionUser(null);
+                    setPendingActionType('');
+                    setSellerActionReason('');
+                  }}
+                  className="px-5 py-2 text-xs uppercase tracking-widest text-stone-500 hover:text-stone-900 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={isProcessingSellerAction}
+                  onClick={() => handleSellerStatusChange(activeSellerActionUser.id, pendingActionType, sellerActionReason)}
+                  className={`px-6 py-2.5 text-xs uppercase tracking-widest font-medium text-white transition-colors ${
+                    pendingActionType === 'approve'
+                      ? 'bg-emerald-800 hover:bg-emerald-900'
+                      : 'bg-red-700 hover:bg-red-800'
+                  }`}
+                >
+                  {isProcessingSellerAction ? 'Processing...' : 'Confirm Action'}
+                </button>
+              </div>
             </div>
           </div>
         )}
+
+        {/* TAB 4: USERS & SELLERS */}
+        {activeTab === 'users' && (() => {
+          const pendingCount = users.filter(u => (u.sellerStatus || '').toLowerCase() === 'pending').length;
+          const activeSellersCount = users.filter(u => u.isSeller || (u.sellerStatus || '').toLowerCase() === 'approved').length;
+          const suspendedCount = users.filter(u => ['suspended', 'rejected'].includes((u.sellerStatus || '').toLowerCase())).length;
+
+          const filteredUsers = users.filter(u => {
+            const st = (u.sellerStatus || (u.isSeller ? 'approved' : 'none')).toLowerCase();
+            if (userFilter === 'pending') return st === 'pending';
+            if (userFilter === 'approved') return st === 'approved' || u.isSeller;
+            if (userFilter === 'suspended') return st === 'suspended' || st === 'rejected';
+            if (userFilter === 'buyers') return st === 'none' && !u.isSeller;
+            return true;
+          });
+
+          return (
+            <div className="space-y-6">
+              
+              {/* Filter Tabs & Summary Bar */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white border border-stone-200 p-4 shadow-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setUserFilter('all')}
+                    className={`px-3.5 py-1.5 text-xs font-medium border transition-colors ${
+                      userFilter === 'all'
+                        ? 'bg-stone-900 text-white border-stone-900'
+                        : 'bg-[#FAF9F6] text-stone-600 border-stone-200 hover:border-stone-400'
+                    }`}
+                  >
+                    All Accounts ({users.length})
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setUserFilter('pending')}
+                    className={`px-3.5 py-1.5 text-xs font-medium border flex items-center gap-1.5 transition-colors ${
+                      userFilter === 'pending'
+                        ? 'bg-amber-600 text-white border-amber-600'
+                        : 'bg-amber-50 text-amber-900 border-amber-200 hover:border-amber-400'
+                    }`}
+                  >
+                    <span>Pending Applications</span>
+                    {pendingCount > 0 && (
+                      <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                        userFilter === 'pending' ? 'bg-white text-amber-700' : 'bg-amber-500 text-white'
+                      }`}>
+                        {pendingCount}
+                      </span>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setUserFilter('approved')}
+                    className={`px-3.5 py-1.5 text-xs font-medium border transition-colors ${
+                      userFilter === 'approved'
+                        ? 'bg-stone-900 text-white border-stone-900'
+                        : 'bg-[#FAF9F6] text-stone-600 border-stone-200 hover:border-stone-400'
+                    }`}
+                  >
+                    Active Sellers ({activeSellersCount})
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setUserFilter('suspended')}
+                    className={`px-3.5 py-1.5 text-xs font-medium border transition-colors ${
+                      userFilter === 'suspended'
+                        ? 'bg-stone-900 text-white border-stone-900'
+                        : 'bg-[#FAF9F6] text-stone-600 border-stone-200 hover:border-stone-400'
+                    }`}
+                  >
+                    Suspended / Cancelled ({suspendedCount})
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setUserFilter('buyers')}
+                    className={`px-3.5 py-1.5 text-xs font-medium border transition-colors ${
+                      userFilter === 'buyers'
+                        ? 'bg-stone-900 text-white border-stone-900'
+                        : 'bg-[#FAF9F6] text-stone-600 border-stone-200 hover:border-stone-400'
+                    }`}
+                  >
+                    Buyers Only
+                  </button>
+                </div>
+
+                <div className="text-xs text-stone-500">
+                  Showing <span className="font-semibold text-stone-900">{filteredUsers.length}</span> accounts
+                </div>
+              </div>
+
+              {/* Accounts & Sellers Table */}
+              <div className="bg-white border border-stone-200 shadow-sm overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-stone-200 bg-[#FAF9F6] text-[10px] uppercase tracking-widest text-stone-400 font-semibold">
+                      <th className="p-4">Student Name & Account</th>
+                      <th className="p-4">Seller Store Details</th>
+                      <th className="p-4">Seller Status</th>
+                      <th className="p-4">Admin Role</th>
+                      <th className="p-4 text-right">Verification & Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-100">
+                    {filteredUsers.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="p-8 text-center text-stone-400 font-sans">
+                          No accounts matching the selected filter.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredUsers.map((u) => {
+                        const rawStatus = (u.sellerStatus || (u.isSeller ? 'approved' : 'none')).toLowerCase();
+                        const details = u.sellerProfile || u.sellerDetails || {};
+
+                        return (
+                          <tr key={u.id} className="hover:bg-stone-50/50 transition-colors">
+                            {/* Student info */}
+                            <td className="p-4">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-stone-900 text-white flex items-center justify-center font-serif text-xs shrink-0">
+                                  {u.name ? u.name.charAt(0).toUpperCase() : 'U'}
+                                </div>
+                                <div>
+                                  <p className="font-medium text-stone-900 text-sm">{u.name}</p>
+                                  <p className="text-stone-500 text-[11px] font-mono">{u.email}</p>
+                                  {u.phone && <p className="text-stone-400 text-[10px]">Ph: {u.phone}</p>}
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* Store details */}
+                            <td className="p-4 text-stone-600 max-w-xs">
+                              {details.storeName ? (
+                                <div>
+                                  <p className="font-medium text-stone-900">{details.storeName}</p>
+                                  <p className="text-stone-500 text-[11px]">{details.campusLocation || 'Campus Pickup'}</p>
+                                  {details.bio && <p className="text-stone-400 text-[10px] truncate">{details.bio}</p>}
+                                  {details.statusReason && (
+                                    <p className="text-red-700 text-[10px] mt-0.5 font-sans bg-red-50 p-1 border border-red-100">
+                                      Note: {details.statusReason}
+                                    </p>
+                                  )}
+                                </div>
+                              ) : u.defaultAddress?.hostelBlock ? (
+                                <span className="text-stone-500">{u.defaultAddress.hostelBlock}, Room {u.defaultAddress.roomNumber}</span>
+                              ) : (
+                                <span className="text-stone-400 italic">No store registered</span>
+                              )}
+                            </td>
+
+                            {/* Status badge */}
+                            <td className="p-4">
+                              {rawStatus === 'approved' && (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] uppercase tracking-wider font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                                  Approved Seller
+                                </span>
+                              )}
+                              {rawStatus === 'pending' && (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] uppercase tracking-wider font-semibold bg-amber-50 text-amber-900 border border-amber-300">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                                  Pending Review
+                                </span>
+                              )}
+                              {rawStatus === 'suspended' && (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] uppercase tracking-wider font-semibold bg-stone-100 text-stone-800 border border-stone-300">
+                                  Suspended
+                                </span>
+                              )}
+                              {rawStatus === 'rejected' && (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] uppercase tracking-wider font-semibold bg-red-50 text-red-800 border border-red-200">
+                                  Cancelled
+                                </span>
+                              )}
+                              {rawStatus === 'none' && (
+                                <span className="text-[10px] uppercase tracking-wider text-stone-400">
+                                  Student Buyer
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Admin Role */}
+                            <td className="p-4">
+                              {u.isAdmin ? (
+                                <span className="inline-block text-[10px] uppercase tracking-wider bg-stone-900 text-white px-2 py-0.5 font-medium">
+                                  Admin Granted
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleAdmin(u.id)}
+                                  className="text-[10px] uppercase tracking-widest text-stone-400 hover:text-stone-800 underline"
+                                  title="Make this student an administrator"
+                                >
+                                  Make Admin
+                                </button>
+                              )}
+                            </td>
+
+                            {/* Verification & Status Control Actions */}
+                            <td className="p-4 text-right">
+                              <div className="flex items-center justify-end gap-2 flex-wrap">
+                                
+                                {/* Case 1: Pending Application -> Approve OR Reject / Cancel */}
+                                {rawStatus === 'pending' && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      disabled={isProcessingSellerAction}
+                                      onClick={() => handleSellerStatusChange(u.id, 'approved')}
+                                      className="px-3 py-1.5 bg-emerald-800 hover:bg-emerald-900 text-white text-[10px] uppercase tracking-wider font-medium transition-colors shadow-sm"
+                                    >
+                                      ✓ Approve
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={isProcessingSellerAction}
+                                      onClick={() => {
+                                        setActiveSellerActionUser(u);
+                                        setPendingActionType('reject');
+                                      }}
+                                      className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-800 border border-red-200 text-[10px] uppercase tracking-wider font-medium transition-colors"
+                                    >
+                                      Cancel / Reject
+                                    </button>
+                                  </>
+                                )}
+
+                                {/* Case 2: Approved Seller -> Suspend OR Cancel / Revoke */}
+                                {rawStatus === 'approved' && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      disabled={isProcessingSellerAction}
+                                      onClick={() => {
+                                        setActiveSellerActionUser(u);
+                                        setPendingActionType('suspend');
+                                      }}
+                                      className="px-3 py-1.5 border border-stone-300 bg-white hover:bg-stone-100 text-stone-700 text-[10px] uppercase tracking-wider font-medium transition-colors"
+                                    >
+                                      Suspend
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={isProcessingSellerAction}
+                                      onClick={() => {
+                                        setActiveSellerActionUser(u);
+                                        setPendingActionType('reject');
+                                      }}
+                                      className="px-3 py-1.5 text-red-600 hover:text-red-800 text-[10px] uppercase tracking-wider font-medium transition-colors"
+                                    >
+                                      Revoke
+                                    </button>
+                                  </>
+                                )}
+
+                                {/* Case 3: Suspended / Rejected -> Re-Approve / Reactivate */}
+                                {(rawStatus === 'suspended' || rawStatus === 'rejected') && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      disabled={isProcessingSellerAction}
+                                      onClick={() => handleSellerStatusChange(u.id, 'approved')}
+                                      className="px-3 py-1.5 bg-stone-900 hover:bg-black text-white text-[10px] uppercase tracking-wider font-medium transition-colors"
+                                    >
+                                      Re-Approve
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={isProcessingSellerAction}
+                                      onClick={() => handleSellerStatusChange(u.id, 'none')}
+                                      className="px-2.5 py-1.5 text-stone-400 hover:text-stone-700 text-[10px] uppercase tracking-wider transition-colors"
+                                    >
+                                      Reset to Buyer
+                                    </button>
+                                  </>
+                                )}
+
+                                {/* Case 4: Student Buyer with no store */}
+                                {rawStatus === 'none' && (
+                                  <span className="text-[10px] text-stone-400 italic">No Action Needed</span>
+                                )}
+
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })()}
 
       </div>
     </main>

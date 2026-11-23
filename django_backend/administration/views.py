@@ -274,3 +274,74 @@ class AdminUsersView(APIView):
         new_status = not target.get("isAdmin", False)
         users_col.update_one({"_id": ObjectId(user_id)}, {"$set": {"isAdmin": new_status}})
         return Response({"message": f"User admin status set to {new_status}."}, status=status.HTTP_200_OK)
+
+
+class AdminSellerStatusView(APIView):
+    """
+    Endpoint for admins to approve, suspend, or cancel/reject a seller.
+    POST /api/admin/sellers/<user_id>/status
+    Body: { "status": "approved" | "suspended" | "rejected" | "none", "reason": "optional reason" }
+    """
+    def post(self, request, user_id):
+        is_ok, res = check_is_admin(request)
+        if not is_ok:
+            return res
+        admin_user = res
+
+        data = request.data or {}
+        new_status = str(data.get("status", "")).strip().lower()
+        reason = str(data.get("reason", "")).strip()
+
+        valid_statuses = ["approved", "suspended", "rejected", "none"]
+        if new_status not in valid_statuses:
+            return Response(
+                {"error": f"Invalid status '{new_status}'. Allowed: {valid_statuses}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        users_col = get_users_collection()
+        try:
+            target = users_col.find_one({"_id": ObjectId(user_id)})
+        except Exception:
+            return Response({"error": "Invalid user ID format."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not target:
+            return Response({"error": "User account not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        now = datetime.now(timezone.utc)
+        is_seller = (new_status == "approved")
+
+        existing_details = target.get("sellerDetails") or target.get("sellerProfile") or {}
+        updated_details = dict(existing_details)
+        updated_details["isVerified"] = is_seller
+        updated_details["reviewedAt"] = now.isoformat()
+        updated_details["reviewedBy"] = admin_user.get("email", "admin")
+        if reason:
+            updated_details["statusReason"] = reason
+
+        update_payload = {
+            "sellerStatus": new_status,
+            "isSeller": is_seller,
+            "sellerProfile": updated_details,
+            "sellerDetails": updated_details,
+            "updatedAt": now,
+        }
+
+        users_col.update_one({"_id": target["_id"]}, {"$set": update_payload})
+        refreshed = users_col.find_one({"_id": target["_id"]})
+
+        action_labels = {
+            "approved": "approved as campus seller",
+            "suspended": "seller account suspended",
+            "rejected": "seller application rejected / cancelled",
+            "none": "seller privileges reset",
+        }
+
+        return Response(
+            {
+                "message": f"User {refreshed.get('name', 'Seller')} has been {action_labels.get(new_status, new_status)}.",
+                "user": serialize_user(refreshed),
+            },
+            status=status.HTTP_200_OK,
+        )
+

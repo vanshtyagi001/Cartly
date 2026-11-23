@@ -59,14 +59,25 @@ def serialize_user(user_doc: dict) -> dict:
             "pincode": "110007",
         }
 
+    raw_status = user_doc.get("sellerStatus")
+    if not raw_status:
+        seller_status = "approved" if user_doc.get("isSeller") else "none"
+    else:
+        seller_status = str(raw_status).lower()
+
+    is_seller = (seller_status == "approved")
+    seller_details = user_doc.get("sellerDetails") or user_doc.get("sellerProfile")
+
     return {
         "id": str(user_doc["_id"]),
         "name": user_doc.get("name", ""),
         "email": user_doc.get("email", ""),
         "phone": user_doc.get("phone", ""),
         "isAdmin": bool(user_doc.get("isAdmin", False)),
-        "isSeller": bool(user_doc.get("isSeller", False)),
-        "sellerProfile": user_doc.get("sellerProfile", None),
+        "isSeller": is_seller,
+        "sellerStatus": seller_status,
+        "sellerProfile": seller_details,
+        "sellerDetails": seller_details,
         "defaultAddress": default_address,
         "createdAt": created_at_str,
     }

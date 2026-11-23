@@ -238,8 +238,173 @@ export default function SellerStudio() {
     );
   }
 
-  // ONBOARDING VIEW (If user is not yet a seller)
-  if (!user?.isSeller) {
+  const sellerStatus = (user?.sellerStatus || (user?.isSeller ? 'approved' : 'none')).toLowerCase();
+  const sellerProfile = user?.sellerProfile || user?.sellerDetails || {};
+
+  // 1. PENDING APPROVAL VIEW: Waiting for Campus Admin Verification
+  if (sellerStatus === 'pending') {
+    return (
+      <main className="flex-1 bg-[#FAF9F6] border-t border-stone-200 py-20 px-6 flex items-center justify-center min-h-[calc(100vh-88px)]">
+        <div className="max-w-xl w-full bg-white border border-stone-200 p-8 sm:p-12 shadow-sm">
+          <div className="inline-flex items-center gap-2 px-3 py-1 bg-amber-50 border border-amber-200 text-amber-900 text-[10px] uppercase tracking-[0.2em] font-semibold mb-6">
+            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+            Application Under Review
+          </div>
+
+          <h1 className="text-3xl sm:text-4xl font-serif text-stone-900 tracking-tight mb-4">
+            Waiting for Campus Approval
+          </h1>
+
+          <p className="text-stone-600 font-sans text-sm leading-relaxed mb-6">
+            Thank you for applying to sell on Cartly. Your seller application for <strong className="text-stone-900">{sellerProfile.storeName || 'your campus store'}</strong> has been submitted to campus administrators for location and student identity verification.
+          </p>
+
+          {/* Application summary receipt */}
+          <div className="bg-[#FAF9F6] border border-stone-200 p-5 mb-8 space-y-3 text-xs">
+            <div className="flex justify-between border-b border-stone-200/60 pb-2">
+              <span className="text-stone-400 uppercase tracking-wider text-[10px]">Store Name</span>
+              <span className="font-serif text-stone-900 font-medium">{sellerProfile.storeName || 'Campus Store'}</span>
+            </div>
+            <div className="flex justify-between border-b border-stone-200/60 pb-2">
+              <span className="text-stone-400 uppercase tracking-wider text-[10px]">Pickup Location</span>
+              <span className="text-stone-800">{sellerProfile.campusLocation || 'North Campus'}</span>
+            </div>
+            <div className="flex justify-between border-b border-stone-200/60 pb-2">
+              <span className="text-stone-400 uppercase tracking-wider text-[10px]">Contact Phone</span>
+              <span className="text-stone-800">{sellerProfile.phone || user?.phone || 'Not provided'}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-stone-400 uppercase tracking-wider text-[10px]">Application Status</span>
+              <span className="text-amber-800 font-semibold uppercase tracking-wider text-[10px]">Pending Verification</span>
+            </div>
+          </div>
+
+          <div className="p-4 bg-stone-50 border border-stone-200 text-stone-600 text-xs leading-relaxed mb-8">
+            <p className="font-medium text-stone-900 mb-1">What happens next?</p>
+            Once an administrator reviews your hostel location and verifies your student status, your Seller Studio will be automatically unlocked. You will be able to list items, accept hostel pickups, and fulfill student orders.
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-3">
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="flex-1 bg-stone-900 text-white text-xs uppercase tracking-[0.15em] font-medium py-3.5 px-6 hover:bg-black transition-colors text-center"
+            >
+              Check Status
+            </button>
+            <Link
+              to="/products"
+              className="flex-1 border border-stone-200 bg-white text-stone-700 text-xs uppercase tracking-[0.15em] font-medium py-3.5 px-6 hover:border-stone-900 hover:text-stone-900 transition-colors text-center"
+            >
+              Browse Campus Catalog
+            </Link>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  // 2. SUSPENDED SELLER VIEW
+  if (sellerStatus === 'suspended') {
+    return (
+      <main className="flex-1 bg-[#FAF9F6] border-t border-stone-200 py-20 px-6 flex items-center justify-center min-h-[calc(100vh-88px)]">
+        <div className="max-w-xl w-full bg-white border border-stone-200 p-8 sm:p-12 shadow-sm">
+          <div className="inline-flex items-center gap-2 px-3 py-1 bg-stone-900 text-white text-[10px] uppercase tracking-[0.2em] font-semibold mb-6">
+            Privileges Paused
+          </div>
+
+          <h1 className="text-3xl sm:text-4xl font-serif text-stone-900 tracking-tight mb-4">
+            Seller Account Suspended
+          </h1>
+
+          <p className="text-stone-600 font-sans text-sm leading-relaxed mb-6">
+            Your seller studio permissions for <strong className="text-stone-900">{sellerProfile.storeName || 'your store'}</strong> have been temporarily suspended by campus administration.
+          </p>
+
+          {sellerProfile.statusReason && (
+            <div className="bg-stone-50 border border-stone-200 p-4 mb-6 text-xs text-stone-700">
+              <span className="block text-[10px] uppercase tracking-wider text-stone-400 font-semibold mb-1">
+                Notice from Administrator
+              </span>
+              <p>{sellerProfile.statusReason}</p>
+            </div>
+          )}
+
+          <p className="text-xs text-stone-500 leading-relaxed mb-8">
+            Please reach out to the campus administration team or email <span className="font-mono text-stone-800">admin@cartly.com</span> with your student ID to resolve this suspension.
+          </p>
+
+          <Link
+            to="/products"
+            className="inline-block w-full bg-stone-900 text-white text-xs uppercase tracking-[0.15em] font-medium py-3.5 text-center hover:bg-black transition-colors"
+          >
+            Return to Campus Store
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
+  // 3. REJECTED / CANCELLED SELLER VIEW
+  if (sellerStatus === 'rejected') {
+    return (
+      <main className="flex-1 bg-[#FAF9F6] border-t border-stone-200 py-20 px-6 flex items-center justify-center min-h-[calc(100vh-88px)]">
+        <div className="max-w-xl w-full bg-white border border-stone-200 p-8 sm:p-12 shadow-sm">
+          <div className="inline-flex items-center gap-2 px-3 py-1 bg-red-50 border border-red-200 text-red-900 text-[10px] uppercase tracking-[0.2em] font-semibold mb-6">
+            Application Cancelled
+          </div>
+
+          <h1 className="text-3xl sm:text-4xl font-serif text-stone-900 tracking-tight mb-4">
+            Application Not Approved
+          </h1>
+
+          <p className="text-stone-600 font-sans text-sm leading-relaxed mb-6">
+            Your application to become a campus seller was not approved by administration.
+          </p>
+
+          {sellerProfile.statusReason && (
+            <div className="bg-red-50/50 border border-red-100 p-4 mb-6 text-xs text-red-800">
+              <span className="block text-[10px] uppercase tracking-wider text-red-400 font-semibold mb-1">
+                Reason Provided
+              </span>
+              <p>{sellerProfile.statusReason}</p>
+            </div>
+          )}
+
+          <div className="flex flex-col sm:flex-row gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                // Allow re-applying by updating onboard form
+                setOnboardForm({
+                  storeName: sellerProfile.storeName || '',
+                  campusLocation: sellerProfile.campusLocation || '',
+                  phone: sellerProfile.phone || user?.phone || '',
+                  bio: sellerProfile.bio || '',
+                });
+                // Switch local user status in memory to allow viewing form
+                user.sellerStatus = 'none';
+                setIsLoading(false);
+                window.location.reload();
+              }}
+              className="flex-1 bg-stone-900 text-white text-xs uppercase tracking-[0.15em] font-medium py-3.5 px-6 hover:bg-black transition-colors text-center"
+            >
+              Re-apply with Updated Info
+            </button>
+            <Link
+              to="/products"
+              className="flex-1 border border-stone-200 bg-white text-stone-700 text-xs uppercase tracking-[0.15em] font-medium py-3.5 px-6 hover:border-stone-900 hover:text-stone-900 transition-colors text-center"
+            >
+              Browse Products
+            </Link>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  // 4. ONBOARDING VIEW (If user has not applied yet: sellerStatus == 'none' and not isSeller)
+  if (!user?.isSeller || sellerStatus !== 'approved') {
     return (
       <main className="flex-1 bg-[#FAF9F6] border-t border-stone-200 py-16 lg:py-24 px-6 md:px-12 min-h-[calc(100vh-88px)]">
         <div className="max-w-[760px] mx-auto">
@@ -249,10 +414,10 @@ export default function SellerStudio() {
               Campus Marketplace
             </span>
             <h1 className="text-4xl md:text-5xl font-serif text-stone-900 tracking-tight mb-4">
-              Open Your Campus Store.
+              Apply to Sell on Cartly.
             </h1>
             <p className="text-stone-500 font-sans text-sm max-w-lg mx-auto leading-relaxed">
-              Start selling study aids, electronics, hostel gear, or handmade essentials directly to fellow students across campus. Zero listing fees.
+              Start selling study aids, electronics, hostel gear, or handmade essentials directly to fellow students across campus. Applications are verified by administration for student safety.
             </p>
           </div>
 
@@ -267,8 +432,8 @@ export default function SellerStudio() {
               <span className="text-[11px] text-stone-500 font-sans">Direct handoff at your dorm block or campus pickup</span>
             </div>
             <div className="p-5 bg-white border border-stone-200">
-              <span className="block font-serif text-stone-900 text-lg mb-1">Direct Reach</span>
-              <span className="text-[11px] text-stone-500 font-sans">Reach students directly across campus and residence halls</span>
+              <span className="block font-serif text-stone-900 text-lg mb-1">Admin Verified</span>
+              <span className="text-[11px] text-stone-500 font-sans">Verified student sellers build trust with campus buyers</span>
             </div>
           </div>
 
@@ -340,12 +505,16 @@ export default function SellerStudio() {
                 />
               </div>
 
+              <div className="p-4 bg-stone-50 border border-stone-200 text-stone-500 text-xs">
+                <span className="font-medium text-stone-800">Verification Process:</span> By submitting this application, your details will be sent to campus administration for approval. Once approved, Seller Studio access will be automatically unlocked.
+              </div>
+
               <button
                 type="submit"
                 disabled={isOnboarding}
                 className="w-full bg-stone-900 text-white text-xs uppercase tracking-[0.15em] font-medium py-4 hover:bg-black transition-all flex items-center justify-center gap-2"
               >
-                {isOnboarding ? 'Setting Up Your Store...' : 'Launch Campus Store'}
+                {isOnboarding ? 'Submitting Application...' : 'Submit Seller Application'}
               </button>
             </form>
           </div>
@@ -355,9 +524,7 @@ export default function SellerStudio() {
     );
   }
 
-  // ACTIVE SELLER STUDIO DASHBOARD
-  const sellerProfile = user?.sellerProfile || {};
-
+  // 5. ACTIVE APPROVED SELLER STUDIO DASHBOARD
   return (
     <main className="flex-1 bg-[#FAF9F6] border-t border-stone-200 py-12 lg:py-16 px-6 md:px-12 min-h-[calc(100vh-88px)]">
       <div className="max-w-[1200px] mx-auto">

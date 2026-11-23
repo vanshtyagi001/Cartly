@@ -11,6 +11,59 @@ from products.repository import get_collection as get_products_collection
 from products.serializers import format_product
 
 
+def check_is_approved_seller(request):
+    user = get_user_from_request(request)
+    if not user:
+        return False, Response(
+            {"error": "Please log in to access Seller Studio."},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    raw_status = user.get("sellerStatus")
+    if not raw_status:
+        seller_status = "approved" if user.get("isSeller") else "none"
+    else:
+        seller_status = str(raw_status).lower()
+
+    if seller_status == "pending":
+        return False, Response(
+            {
+                "error": "Your seller application is under review by campus administrators. Access will be unlocked upon approval.",
+                "sellerStatus": "pending",
+            },
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    if seller_status == "suspended":
+        return False, Response(
+            {
+                "error": "Your seller account has been suspended by administration.",
+                "sellerStatus": "suspended",
+            },
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    if seller_status == "rejected":
+        return False, Response(
+            {
+                "error": "Your seller application was not approved.",
+                "sellerStatus": "rejected",
+            },
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    if seller_status != "approved" and not user.get("isSeller"):
+        return False, Response(
+            {
+                "error": "Seller account required. Please submit a seller application first.",
+                "sellerStatus": "none",
+            },
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    return True, user
+
+
 class SellerOnboardView(APIView):
     def post(self, request):
         user = get_user_from_request(request)
@@ -44,8 +97,11 @@ class SellerOnboardView(APIView):
             "campusLocation": campus_location,
             "phone": phone or user.get("phone", ""),
             "bio": bio or "Student seller at Cartly Campus Hub.",
-            "isVerified": True,
-            "joinedAt": now.isoformat(),
+            "isVerified": False,
+            "appliedAt": now.isoformat(),
+            "reviewedAt": None,
+            "reviewedBy": None,
+            "statusReason": "",
         }
 
         users_col = get_users_collection()
@@ -53,8 +109,10 @@ class SellerOnboardView(APIView):
             {"_id": user["_id"]},
             {
                 "$set": {
-                    "isSeller": True,
+                    "isSeller": False,
+                    "sellerStatus": "pending",
                     "sellerProfile": seller_profile,
+                    "sellerDetails": seller_profile,
                     "updatedAt": now,
                 }
             },
@@ -63,7 +121,7 @@ class SellerOnboardView(APIView):
         updated_user = users_col.find_one({"_id": user["_id"]})
         return Response(
             {
-                "message": f"Welcome to the Cartly Seller Hub! Your store '{store_name}' is live.",
+                "message": f"Application for '{store_name}' submitted successfully. Please wait until campus administration verifies your profile.",
                 "user": serialize_user(updated_user),
             },
             status=status.HTTP_200_OK,
@@ -72,12 +130,10 @@ class SellerOnboardView(APIView):
 
 class SellerDashboardStatsView(APIView):
     def get(self, request):
-        user = get_user_from_request(request)
-        if not user or not user.get("isSeller"):
-            return Response(
-                {"error": "Seller account required."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+        is_ok, res = check_is_approved_seller(request)
+        if not is_ok:
+            return res
+        user = res
 
         user_id = str(user["_id"])
         products_col = get_products_collection()
@@ -121,12 +177,10 @@ class SellerDashboardStatsView(APIView):
 
 class SellerProductListCreateView(APIView):
     def get(self, request):
-        user = get_user_from_request(request)
-        if not user or not user.get("isSeller"):
-            return Response(
-                {"error": "Seller account required."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+        is_ok, res = check_is_approved_seller(request)
+        if not is_ok:
+            return res
+        user = res
 
         user_id = str(user["_id"])
         products_col = get_products_collection()
@@ -134,12 +188,10 @@ class SellerProductListCreateView(APIView):
         return Response([format_product(p) for p in docs], status=status.HTTP_200_OK)
 
     def post(self, request):
-        user = get_user_from_request(request)
-        if not user or not user.get("isSeller"):
-            return Response(
-                {"error": "Seller account required."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+        is_ok, res = check_is_approved_seller(request)
+        if not is_ok:
+            return res
+        user = res
 
         data = request.data or {}
         name = str(data.get("name", "")).strip()
@@ -209,12 +261,10 @@ class SellerProductListCreateView(APIView):
 
 class SellerProductDetailView(APIView):
     def put(self, request, product_id):
-        user = get_user_from_request(request)
-        if not user or not user.get("isSeller"):
-            return Response(
-                {"error": "Seller account required."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+        is_ok, res = check_is_approved_seller(request)
+        if not is_ok:
+            return res
+        user = res
 
         products_col = get_products_collection()
         prod = products_col.find_one({"productId": product_id, "sellerId": str(user["_id"])})
@@ -253,12 +303,10 @@ class SellerProductDetailView(APIView):
         )
 
     def delete(self, request, product_id):
-        user = get_user_from_request(request)
-        if not user or not user.get("isSeller"):
-            return Response(
-                {"error": "Seller account required."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+        is_ok, res = check_is_approved_seller(request)
+        if not is_ok:
+            return res
+        user = res
 
         products_col = get_products_collection()
         result = products_col.delete_one({"productId": product_id, "sellerId": str(user["_id"])})
@@ -277,12 +325,10 @@ class SellerProductDetailView(APIView):
 
 class SellerOrdersView(APIView):
     def get(self, request):
-        user = get_user_from_request(request)
-        if not user or not user.get("isSeller"):
-            return Response(
-                {"error": "Seller account required."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+        is_ok, res = check_is_approved_seller(request)
+        if not is_ok:
+            return res
+        user = res
 
         user_id = str(user["_id"])
         orders_col = get_orders_collection()
@@ -299,12 +345,10 @@ class SellerOrdersView(APIView):
 
 class SellerOrderStatusUpdateView(APIView):
     def patch(self, request, order_id):
-        user = get_user_from_request(request)
-        if not user or not user.get("isSeller"):
-            return Response(
-                {"error": "Seller account required."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+        is_ok, res = check_is_approved_seller(request)
+        if not is_ok:
+            return res
+        user = res
 
         data = request.data or {}
         new_status = str(data.get("status", "")).strip()
