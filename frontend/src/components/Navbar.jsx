@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 
@@ -7,6 +7,7 @@ export default function Navbar() {
   const { setIsCartOpen, cartCount } = useCart();
   const { user, isAuthenticated, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const userMenuRef = useRef(null);
@@ -35,11 +36,8 @@ export default function Navbar() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Pure Cipher Shuffle Logic (No routing, no redirecting)
-  const handleLogoClick = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
+  // Scramble Animation & Home Navigation
+  const triggerCipherAnimation = () => {
     if (isScrambling) return; 
     setIsScrambling(true);
 
@@ -56,11 +54,30 @@ export default function Navbar() {
       
       if (iterations >= originalLogo.length) {
         clearInterval(interval);
+        setLogoText(originalLogo);
         setIsScrambling(false);
       }
       
       iterations += 1 / 4; 
     }, 30);
+  };
+
+  const handleLogoClick = (e) => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+
+    // 1. Navigate to home if on another page
+    if (location.pathname !== '/') {
+      navigate('/');
+    }
+
+    // 2. Scroll smoothly to top
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    // 3. Play the signature cipher animation
+    setTimeout(() => {
+      triggerCipherAnimation();
+    }, 60);
   };
 
   const handleLogout = () => {
@@ -72,14 +89,16 @@ export default function Navbar() {
   return (
     <nav className="flex items-center justify-between px-8 md:px-12 py-5 bg-[#FAF9F6] text-stone-900 sticky top-0 z-50 transition-all duration-300">
       
-      {/* Left: Logo with Easter Egg */}
+      {/* Left: Logo with Easter Egg & Navigation */}
       <div className="flex-1 flex items-center justify-start z-20">
-        <span 
+        <Link 
+          to="/"
           onClick={handleLogoClick}
-          className="text-3xl font-serif tracking-tight text-stone-900 cursor-pointer select-none"
+          className="text-3xl font-serif tracking-tight text-stone-900 cursor-pointer select-none inline-block focus:outline-none"
+          title="Cartly Home"
         >
           {logoText}
-        </span>
+        </Link>
       </div>
 
       {/* Center: Navigation Links */}
