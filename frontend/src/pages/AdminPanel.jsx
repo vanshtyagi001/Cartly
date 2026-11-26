@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import ImageUploadInput from '../components/ImageUploadInput';
+import ProductImagesInput from '../components/ProductImagesInput';
 
 export default function AdminPanel() {
   const navigate = useNavigate();
@@ -64,6 +64,7 @@ export default function AdminPanel() {
     price: '',
     stock: 25,
     img: '',
+    images: [],
     description: '',
   });
   const [isSubmittingProduct, setIsSubmittingProduct] = useState(false);
@@ -294,6 +295,11 @@ export default function AdminPanel() {
       return;
     }
 
+    if (!newProduct.img || !newProduct.img.trim()) {
+      setAddProductError('Featured product image is compulsory.');
+      return;
+    }
+
     setIsSubmittingProduct(true);
     try {
       const res = await fetch(`${API_URL}/api/admin/products`, {
@@ -308,6 +314,7 @@ export default function AdminPanel() {
           price: parsedPrice,
           stock: Math.max(0, parseInt(newProduct.stock, 10) || 0),
           img: newProduct.img.trim(),
+          images: newProduct.images || [],
           description: newProduct.description.trim(),
         }),
       });
@@ -317,7 +324,7 @@ export default function AdminPanel() {
 
       showNotice(`'${newProduct.name}' successfully added to platform catalog.`);
       setIsAddingProduct(false);
-      setNewProduct({ name: '', category: 'Hostel Essentials', price: '', stock: 25, img: '', description: '' });
+      setNewProduct({ name: '', category: 'Hostel Essentials', price: '', stock: 25, img: '', images: [], description: '' });
       setActiveTab('catalog');
       fetchAdminData();
     } catch (err) {
@@ -344,6 +351,11 @@ export default function AdminPanel() {
       return;
     }
 
+    if (!editingProduct.img || !editingProduct.img.trim()) {
+      setEditProductError('Featured product image is compulsory.');
+      return;
+    }
+
     setIsUpdatingProduct(true);
     try {
       const res = await fetch(`${API_URL}/api/admin/products/${editingProduct.id}`, {
@@ -358,6 +370,7 @@ export default function AdminPanel() {
           price: parsedPrice,
           stock: Math.max(0, parseInt(editingProduct.stock, 10) || 0),
           img: editingProduct.img.trim(),
+          images: editingProduct.images || [],
           description: editingProduct.description?.trim() || '',
           inStock: Number(editingProduct.stock) > 0,
         }),
@@ -739,11 +752,11 @@ export default function AdminPanel() {
                 </div>
 
                 <div className="sm:col-span-2">
-                  <ImageUploadInput
-                    value={editingProduct.img || ''}
-                    onChange={(val) => setEditingProduct(prev => ({ ...prev, img: val }))}
+                  <ProductImagesInput
+                    img={editingProduct.img || ''}
+                    images={editingProduct.images || []}
+                    onChange={({ img, images }) => setEditingProduct(prev => ({ ...prev, img, images }))}
                     presets={adminImagePresets}
-                    label="Product Photo"
                   />
                 </div>
               </div>
@@ -897,11 +910,11 @@ export default function AdminPanel() {
                 </div>
 
                 <div className="sm:col-span-2">
-                  <ImageUploadInput
-                    value={newProduct.img}
-                    onChange={(val) => setNewProduct(prev => ({ ...prev, img: val }))}
+                  <ProductImagesInput
+                    img={newProduct.img}
+                    images={newProduct.images || []}
+                    onChange={({ img, images }) => setNewProduct(prev => ({ ...prev, img, images }))}
                     presets={adminImagePresets}
-                    label="Product Photo"
                   />
                 </div>
               </div>

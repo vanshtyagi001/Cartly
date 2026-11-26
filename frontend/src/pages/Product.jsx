@@ -5,6 +5,7 @@ import { useCart } from '../context/CartContext';
 export default function Product() {
   const { id } = useParams(); 
   const [quantity, setQuantity] = useState(1);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [showToast, setShowToast] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   
@@ -19,6 +20,7 @@ export default function Product() {
   useEffect(() => {
     setIsLoading(true);
     setQuantity(1);
+    setSelectedImageIndex(0);
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
     fetch(`${import.meta.env.VITE_API_URL}/api/products`)
@@ -91,6 +93,11 @@ export default function Product() {
     );
   }
 
+  const galleryImages = (Array.isArray(product.images) && product.images.length > 0)
+    ? product.images
+    : (product.img ? [product.img] : []);
+  const activeImage = galleryImages[selectedImageIndex] || product.img;
+
   const handleAddToCart = () => {
     addToCart(product, quantity);
     setShowToast(true);
@@ -103,15 +110,15 @@ export default function Product() {
       <div className="w-full bg-white border-t border-stone-200">
         <main className="max-w-[1400px] mx-auto px-8 md:px-12 py-12 lg:py-16 flex flex-col lg:flex-row gap-12 lg:gap-20 items-stretch relative">
           
-          {/* Left Column: Constrained Image */}
-          <div className="w-full lg:w-1/2 flex items-start justify-center">
+          {/* Left Column: Constrained Image & Optional Gallery Thumbnails */}
+          <div className="w-full lg:w-1/2 flex flex-col gap-4">
             {/* Base Image: 65vh tall */}
             <div 
               onClick={() => setIsFullscreen(true)}
               className="w-full max-h-[65vh] bg-[#FAF9F6] overflow-hidden border border-stone-200 cursor-zoom-in group relative"
             >
               <img 
-                src={product.img} 
+                src={activeImage} 
                 alt={product.name} 
                 className="w-full h-full object-cover max-h-[65vh] mix-blend-multiply group-hover:scale-[1.03] transition-transform duration-[1.5s] ease-[cubic-bezier(0.25,0.1,0.25,1)]" 
               />
@@ -122,6 +129,31 @@ export default function Product() {
                 </span>
               </div>
             </div>
+
+            {/* Thumbnail Strip when multiple images exist */}
+            {galleryImages.length > 1 && (
+              <div className="flex items-center gap-3 overflow-x-auto pb-1">
+                {galleryImages.map((imgUrl, idx) => (
+                  <button
+                    key={`${imgUrl.slice(0, 24)}-${idx}`}
+                    type="button"
+                    onClick={() => setSelectedImageIndex(idx)}
+                    className={`w-16 h-16 sm:w-20 sm:h-20 shrink-0 bg-[#FAF9F6] border overflow-hidden transition-all ${
+                      selectedImageIndex === idx
+                        ? 'border-stone-900 ring-1 ring-stone-900 opacity-100'
+                        : 'border-stone-200 opacity-65 hover:opacity-100 hover:border-stone-400'
+                    }`}
+                    aria-label={`View image ${idx + 1}`}
+                  >
+                    <img
+                      src={imgUrl}
+                      alt={`${product.name} view ${idx + 1}`}
+                      className="w-full h-full object-cover mix-blend-multiply"
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Right Column: Product Information */}
@@ -307,15 +339,53 @@ export default function Product() {
           </svg>
         </button>
 
+        {/* Previous / Next Controls in Lightbox if multiple images */}
+        {galleryImages.length > 1 && (
+          <>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedImageIndex((prev) => (prev - 1 + galleryImages.length) % galleryImages.length);
+              }}
+              className="absolute left-4 md:left-8 top-1/2 -translate-y-1/2 text-stone-400 hover:text-white p-3 bg-stone-900/50 border border-stone-700 transition-colors z-50"
+              aria-label="Previous image"
+            >
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedImageIndex((prev) => (prev + 1) % galleryImages.length);
+              }}
+              className="absolute right-4 md:right-8 top-1/2 -translate-y-1/2 text-stone-400 hover:text-white p-3 bg-stone-900/50 border border-stone-700 transition-colors z-50"
+              aria-label="Next image"
+            >
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </>
+        )}
+
         {/* Enlarged Image */}
         <img 
-          src={product.img} 
+          src={activeImage} 
           alt={product.name} 
           onClick={(e) => e.stopPropagation()} // Prevent click from closing when clicking the image itself
           className={`h-[80vh] md:h-[85vh] w-auto max-w-full object-contain shadow-2xl transition-transform duration-700 ease-[cubic-bezier(0.25,0.1,0.25,1)] bg-[#FAF9F6] border border-stone-800 ${
             isFullscreen ? 'scale-100' : 'scale-95'
           }`} 
         />
+
+        {galleryImages.length > 1 && (
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-[10px] uppercase tracking-[0.25em] text-stone-300 bg-stone-900/70 px-4 py-1.5 border border-stone-700">
+            {selectedImageIndex + 1} / {galleryImages.length}
+          </div>
+        )}
       </div>
 
       {/* Toast Notification Popup */}

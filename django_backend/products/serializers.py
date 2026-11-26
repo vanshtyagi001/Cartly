@@ -52,6 +52,27 @@ def json_safe(value):
     return value
 
 
+def normalize_product_images(featured_img, raw_images=None):
+    """Normalize featured image (first & compulsory) and optional additional gallery images."""
+    featured = str(featured_img or "").strip()
+    gallery = []
+    if isinstance(raw_images, list):
+        for item in raw_images:
+            url = str(item or "").strip()
+            if url and url not in gallery:
+                gallery.append(url)
+
+    if featured:
+        images = [featured] + [url for url in gallery if url != featured]
+    elif gallery:
+        featured = gallery[0]
+        images = gallery
+    else:
+        images = []
+
+    return featured, images
+
+
 def format_product(product):
     stock = product.get("stock")
     if stock is None:
@@ -63,6 +84,7 @@ def format_product(product):
         stock = 0
 
     in_stock = bool(product.get("inStock", True)) and (stock > 0)
+    featured_img, images = normalize_product_images(product.get("img"), product.get("images"))
 
     return {
         "id": product["productId"],
@@ -70,7 +92,8 @@ def format_product(product):
         "category": product["category"],
         "price": f"₹{product['price']}",
         "rawPrice": product.get("price", 0),
-        "img": product["img"],
+        "img": featured_img,
+        "images": images,
         "stock": stock,
         "sellerId": product.get("sellerId"),
         "sellerName": product.get("sellerName", "Cartly Campus Hub"),

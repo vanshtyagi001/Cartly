@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import ImageUploadInput from '../components/ImageUploadInput';
+import ProductImagesInput from '../components/ProductImagesInput';
 
 export default function SellerStudio() {
   const { user, token, isAuthenticated, updateProfile, updateUserState, refreshUser } = useAuth();
@@ -77,6 +77,7 @@ export default function SellerStudio() {
     price: '',
     stock: 25,
     img: '',
+    images: [],
     description: '',
   });
   const [isSavingProduct, setIsSavingProduct] = useState(false);
@@ -186,6 +187,10 @@ export default function SellerStudio() {
   const handleAddProductSubmit = async (e) => {
     e.preventDefault();
     setActionError('');
+    if (!newProduct.img || !newProduct.img.trim()) {
+      setActionError('Featured product image is compulsory and will be shown as the thumbnail on /shop.');
+      return;
+    }
     setIsSavingProduct(true);
 
     try {
@@ -211,6 +216,7 @@ export default function SellerStudio() {
         price: '',
         stock: 25,
         img: '',
+        images: [],
         description: '',
       });
       loadSellerData();
@@ -227,6 +233,10 @@ export default function SellerStudio() {
     e.preventDefault();
     if (!editingProduct) return;
     setActionError('');
+    if (!editingProduct.img || !editingProduct.img.trim()) {
+      setActionError('Featured product image is compulsory and cannot be empty.');
+      return;
+    }
     setIsUpdatingProduct(true);
 
     try {
@@ -242,6 +252,7 @@ export default function SellerStudio() {
           price: editingProduct.rawPrice !== undefined ? editingProduct.rawPrice : editingProduct.price,
           stock: Math.max(0, parseInt(editingProduct.stock, 10) || 0),
           img: editingProduct.img,
+          images: editingProduct.images || [],
           description: editingProduct.description,
           inStock: Number(editingProduct.stock) > 0,
         }),
@@ -907,11 +918,11 @@ export default function SellerStudio() {
                     </div>
 
                     <div className="sm:col-span-2">
-                      <ImageUploadInput
-                        value={editingProduct.img || ''}
-                        onChange={(val) => setEditingProduct(prev => ({ ...prev, img: val }))}
+                      <ProductImagesInput
+                        img={editingProduct.img || ''}
+                        images={editingProduct.images || []}
+                        onChange={({ img, images }) => setEditingProduct(prev => ({ ...prev, img, images }))}
                         presets={imagePresets}
-                        label="Product Photo"
                       />
                     </div>
                   </div>
@@ -1036,11 +1047,11 @@ export default function SellerStudio() {
                     </div>
 
                     <div className="sm:col-span-2">
-                      <ImageUploadInput
-                        value={newProduct.img}
-                        onChange={(val) => setNewProduct(prev => ({ ...prev, img: val }))}
+                      <ProductImagesInput
+                        img={newProduct.img}
+                        images={newProduct.images || []}
+                        onChange={({ img, images }) => setNewProduct(prev => ({ ...prev, img, images }))}
                         presets={imagePresets}
-                        label="Product Photo"
                       />
                     </div>
                   </div>

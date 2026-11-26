@@ -8,7 +8,7 @@ from accounts.repository import get_users_collection
 from orders.repository import get_orders_collection
 from orders.serializers import format_order
 from products.repository import get_collection as get_products_collection
-from products.serializers import format_product
+from products.serializers import format_product, normalize_product_images
 
 
 def check_is_approved_seller(request):
@@ -196,7 +196,7 @@ class SellerProductListCreateView(APIView):
         data = request.data or {}
         name = str(data.get("name", "")).strip()
         category = str(data.get("category", "Hostel Essentials")).strip()
-        img = str(data.get("img", "")).strip()
+        featured_img, images = normalize_product_images(data.get("img"), data.get("images"))
         description = str(data.get("description", "")).strip()
 
         try:
@@ -215,15 +215,17 @@ class SellerProductListCreateView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        if not featured_img:
+            return Response(
+                {"error": "Featured product image is compulsory and will be used as the shop thumbnail."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         try:
             raw_stock = data.get("stock", 25)
             stock = max(0, int(raw_stock)) if raw_stock is not None else 25
         except (ValueError, TypeError):
             stock = 25
-
-        # Default fallback image if none provided
-        if not img:
-            img = "https://images.unsplash.com/photo-1583847268964-b28dc8f51f92?q=80&w=800&auto=format&fit=crop"
 
         products_col = get_products_collection()
 
@@ -240,7 +242,8 @@ class SellerProductListCreateView(APIView):
             "category": category,
             "price": price,
             "stock": stock,
-            "img": img,
+            "img": featured_img,
+            "images": images,
             "description": description or f"Listed by {seller_profile.get('storeName', user.get('name'))}",
             "sellerId": str(user["_id"]),
             "sellerName": seller_profile.get("storeName", user.get("name")),
@@ -299,8 +302,17 @@ class SellerProductDetailView(APIView):
                 update_fields["inStock"] = (new_stock > 0)
             except (ValueError, TypeError):
                 pass
-        if "img" in data and str(data["img"]).strip():
-            update_fields["img"] = str(data["img"]).strip()
+        if "img" in data or "images" in data:
+            target_img = data.get("img") if "img" in data else prod.get("img")
+            target_images = data.get("images") if "images" in data else prod.get("images")
+            featured_img, images = normalize_product_images(target_img, target_images)
+            if not featured_img:
+                return Response(
+                    {"error": "Featured product image is compulsory and cannot be empty."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            update_fields["img"] = featured_img
+            update_fields["images"] = images
         if "description" in data:
             update_fields["description"] = str(data["description"]).strip()
         if "inStock" in data:

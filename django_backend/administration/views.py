@@ -16,7 +16,7 @@ from accounts.repository import get_users_collection
 from orders.repository import get_orders_collection
 from orders.serializers import format_order
 from products.repository import get_categories_collection, get_collection as get_products_collection
-from products.serializers import format_product
+from products.serializers import format_product, normalize_product_images
 from products.views import DEFAULT_CATEGORIES, ensure_default_categories
 
 
@@ -197,7 +197,7 @@ class AdminProductsView(APIView):
         data = request.data or {}
         name = str(data.get("name", "")).strip()
         category = str(data.get("category", "Hostel Essentials")).strip()
-        img = str(data.get("img", "")).strip()
+        featured_img, images = normalize_product_images(data.get("img"), data.get("images"))
         description = str(data.get("description", "")).strip()
 
         try:
@@ -216,8 +216,11 @@ class AdminProductsView(APIView):
         if not name or price <= 0:
             return Response({"error": "Product name and price are required."}, status=status.HTTP_400_BAD_REQUEST)
 
-        if not img:
-            img = "https://images.unsplash.com/photo-1583847268964-b28dc8f51f92?q=80&w=800&auto=format&fit=crop"
+        if not featured_img:
+            return Response(
+                {"error": "Featured product image is compulsory and will be used as the shop thumbnail."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         products_col = get_products_collection()
         latest = products_col.find_one(sort=[("productId", -1)])
@@ -230,7 +233,8 @@ class AdminProductsView(APIView):
             "category": category,
             "price": price,
             "stock": stock,
-            "img": img,
+            "img": featured_img,
+            "images": images,
             "description": description or "Official Cartly Campus Catalog Essential.",
             "sellerName": "Cartly Official Hub",
             "sellerLocation": "Central Store",
@@ -271,8 +275,17 @@ class AdminProductsView(APIView):
                 update_fields["inStock"] = (new_stock > 0)
             except (ValueError, TypeError):
                 pass
-        if "img" in data and str(data["img"]).strip():
-            update_fields["img"] = str(data["img"]).strip()
+        if "img" in data or "images" in data:
+            target_img = data.get("img") if "img" in data else prod.get("img")
+            target_images = data.get("images") if "images" in data else prod.get("images")
+            featured_img, images = normalize_product_images(target_img, target_images)
+            if not featured_img:
+                return Response(
+                    {"error": "Featured product image is compulsory and cannot be empty."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            update_fields["img"] = featured_img
+            update_fields["images"] = images
         if "description" in data:
             update_fields["description"] = str(data["description"]).strip()
         if "inStock" in data:
