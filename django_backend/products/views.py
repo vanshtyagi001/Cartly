@@ -64,7 +64,40 @@ class HealthView(APIView):
 class ProductListCreateView(APIView):
     def get(self, request):
         try:
-            products = [format_product(product) for product in get_collection().find()]
+            col = get_collection()
+            query = {}
+
+            category = request.query_params.get("category", "").strip()
+            if category and category != "All Products":
+                query["category"] = category
+
+            search = request.query_params.get("search", "").strip()
+            if search:
+                import re
+                safe_q = re.escape(search)
+                query["$or"] = [
+                    {"name": {"$regex": safe_q, "$options": "i"}},
+                    {"description": {"$regex": safe_q, "$options": "i"}},
+                    {"sellerName": {"$regex": safe_q, "$options": "i"}},
+                    {"category": {"$regex": safe_q, "$options": "i"}},
+                ]
+
+            sort_param = request.query_params.get("sort", "").strip()
+            sort_spec = None
+            if sort_param == "price-asc":
+                sort_spec = [("price", 1)]
+            elif sort_param == "price-desc":
+                sort_spec = [("price", -1)]
+            elif sort_param == "name-desc":
+                sort_spec = [("name", -1)]
+            elif sort_param == "name-asc":
+                sort_spec = [("name", 1)]
+
+            cursor = col.find(query)
+            if sort_spec:
+                cursor = cursor.sort(sort_spec)
+
+            products = [format_product(product) for product in cursor]
             return Response(products)
         except Exception as error:
             return Response(
@@ -95,4 +128,41 @@ class ProductListCreateView(APIView):
             return Response(
                 {"message": "Error adding product", "error": str(error)},
                 status=400,
+            )
+
+
+class ProductDetailView(APIView):
+    def get(self, request, product_id):
+        try:
+            col = get_collection()
+            prod = col.find_one({"productId": product_id})
+            if not prod:
+                return Response(
+                    {"error": "Product not found."},
+                    status=404,
+                )
+
+            category = prod.get("category")
+            same_cat = list(
+                col.find({"productId": {"$ne": product_id}, "category": category}).limit(4)
+            )
+            suggestions = list(same_cat)
+
+            if len(suggestions) < 4:
+                needed = 4 - len(suggestions)
+                other_cat = list(
+                    col.find({"productId": {"$ne": product_id}, "category": {"$ne": category}}).limit(needed)
+                )
+                suggestions.extend(other_cat)
+
+            return Response(
+                {
+                    "product": format_product(prod),
+                    "suggestions": [format_product(s) for s in suggestions],
+                }
+            )
+        except Exception as error:
+            return Response(
+                {"message": "Server Error", "error": str(error)},
+                status=500,
             )

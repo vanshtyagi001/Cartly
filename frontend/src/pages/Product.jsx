@@ -21,7 +21,7 @@ export default function Product() {
   
   const { addToCart } = useCart(); 
 
-  // Fetch products from backend, find active product, and extract contextual suggestions
+  // Fetch single product and contextual suggestions from backend
   useEffect(() => {
     setIsLoading(true);
     setQuantity(1);
@@ -30,38 +30,23 @@ export default function Product() {
     if (user?.email) setNotifyEmail(user.email);
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
-    fetch(`${import.meta.env.VITE_API_URL}/api/products`)
-      .then(res => res.json())
-      .then(data => {
-        if (!Array.isArray(data)) {
-          setProduct(null);
-          setIsLoading(false);
-          return;
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    fetch(`${apiUrl}/api/products/${id}`)
+      .then(async (res) => {
+        if (!res.ok) {
+          throw new Error('Product not found');
         }
-
-        const currentId = parseInt(id);
-        const foundProduct = data.find(p => p.id === currentId);
-        setProduct(foundProduct);
-
-        if (foundProduct) {
-          // Priority 1: Same category, excluding current product
-          const sameCategory = data.filter(
-            p => p.id !== currentId && p.category === foundProduct.category
-          );
-          // Priority 2: Other campus products
-          const otherProducts = data.filter(
-            p => p.id !== currentId && p.category !== foundProduct.category
-          );
-
-          // Combine to yield 4 curated suggestions
-          const combinedSuggestions = [...sameCategory, ...otherProducts].slice(0, 4);
-          setSuggestions(combinedSuggestions);
-        }
-
+        return res.json();
+      })
+      .then((data) => {
+        setProduct(data?.product || null);
+        setSuggestions(Array.isArray(data?.suggestions) ? data.suggestions : []);
         setIsLoading(false);
       })
-      .catch(error => {
-        console.error("Error fetching product:", error);
+      .catch((error) => {
+        console.error('Error fetching product:', error);
+        setProduct(null);
+        setSuggestions([]);
         setIsLoading(false);
       });
   }, [id]);
