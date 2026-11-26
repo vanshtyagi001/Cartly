@@ -19,7 +19,7 @@ export default function Product() {
   const [suggestions, setSuggestions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   
-  const { addToCart, setIsCartOpen } = useCart(); 
+  const { addToCart } = useCart(); 
 
   // Fetch products from backend, find active product, and extract contextual suggestions
   useEffect(() => {
@@ -295,31 +295,22 @@ export default function Product() {
             )}
 
             {/* Action Buttons */}
-            <div className="space-y-3 mt-auto">
-              <div className="flex flex-col sm:flex-row gap-3">
-                <button
-                  type="button"
-                  onClick={handleBuyNow}
-                  disabled={(product.stock !== undefined ? product.stock : 25) <= 0}
-                  className="flex-1 bg-stone-900 text-white py-4 px-8 text-[10px] uppercase tracking-[0.2em] font-medium hover:bg-black transition-colors duration-300 disabled:opacity-40 disabled:hover:bg-stone-900"
-                >
-                  {(product.stock !== undefined ? product.stock : 25) > 0 ? 'Buy Now' : 'Out of Stock'}
-                </button>
-                <button 
-                  type="button"
-                  onClick={handleAddToCart}
-                  disabled={(product.stock !== undefined ? product.stock : 25) <= 0}
-                  className="flex-1 bg-white border border-stone-900 text-stone-900 py-4 px-8 text-[10px] uppercase tracking-[0.2em] font-medium hover:bg-stone-50 transition-colors duration-300 disabled:opacity-40 disabled:border-stone-300"
-                >
-                  Add to Cart
-                </button>
-              </div>
+            <div className="flex flex-col sm:flex-row gap-3 mt-auto">
+              <button
+                type="button"
+                onClick={handleBuyNow}
+                disabled={(product.stock !== undefined ? product.stock : 25) <= 0}
+                className="flex-1 bg-stone-900 text-white py-4 px-8 text-[10px] uppercase tracking-[0.2em] font-medium hover:bg-black transition-colors duration-300 disabled:opacity-40 disabled:hover:bg-stone-900"
+              >
+                {(product.stock !== undefined ? product.stock : 25) > 0 ? 'Buy Now' : 'Out of Stock'}
+              </button>
               <button 
                 type="button"
-                onClick={() => setIsCartOpen(true)}
-                className="w-full bg-transparent border border-stone-300 text-stone-700 py-3.5 px-8 text-[10px] uppercase tracking-[0.2em] font-medium hover:border-stone-900 hover:text-stone-900 transition-colors duration-300"
+                onClick={handleAddToCart}
+                disabled={(product.stock !== undefined ? product.stock : 25) <= 0}
+                className="flex-1 bg-white border border-stone-900 text-stone-900 py-4 px-8 text-[10px] uppercase tracking-[0.2em] font-medium hover:bg-stone-50 transition-colors duration-300 disabled:opacity-40 disabled:border-stone-300"
               >
-                View Cart
+                Add to Cart
               </button>
             </div>
           </div>
