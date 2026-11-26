@@ -18,6 +18,8 @@ export default function SellerStudio() {
   });
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
+  const [questions, setQuestions] = useState([]);
+  const [replyDrafts, setReplyDrafts] = useState({});
   const [categories, setCategories] = useState([
     'Hostel Essentials',
     'Electronics',
@@ -124,6 +126,13 @@ export default function SellerStudio() {
       if (ordersRes.ok) {
         const ordersData = await ordersRes.json();
         setOrders(ordersData || []);
+      }
+
+      // Load buyer questions
+      const qRes = await fetch(`${API_URL}/api/seller/questions`, { headers });
+      if (qRes.ok) {
+        const qData = await qRes.json();
+        setQuestions(qData.questions || []);
       }
 
       // Load active platform categories
@@ -313,6 +322,49 @@ export default function SellerStudio() {
       }
     } catch (err) {
       console.error('Status update error:', err);
+    }
+  };
+
+  const handleReturnAction = async (orderId, newStatus) => {
+    try {
+      const res = await fetch(`${API_URL}/api/seller/orders/${orderId}/return`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (res.ok) {
+        setActionSuccess(`Return request on Order #${orderId} marked as ${newStatus}.`);
+        loadSellerData();
+        setTimeout(() => setActionSuccess(''), 4000);
+      }
+    } catch (err) {
+      console.error('Return action error:', err);
+    }
+  };
+
+  const handleReplyQuestion = async (questionId) => {
+    const answer = (replyDrafts[questionId] || '').trim();
+    if (!answer) return;
+    try {
+      const res = await fetch(`${API_URL}/api/seller/questions/${questionId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ answer }),
+      });
+      if (res.ok) {
+        setReplyDrafts((prev) => ({ ...prev, [questionId]: '' }));
+        setActionSuccess('Reply published to product page.');
+        loadSellerData();
+        setTimeout(() => setActionSuccess(''), 3000);
+      }
+    } catch (err) {
+      console.error('Reply error:', err);
     }
   };
 
@@ -797,6 +849,18 @@ export default function SellerStudio() {
           </button>
 
           <button
+            onClick={() => setActiveTab('questions')}
+            className={`pb-4 text-xs uppercase tracking-widest font-medium transition-colors whitespace-nowrap relative ${
+              activeTab === 'questions' ? 'text-stone-900 font-semibold' : 'text-stone-400 hover:text-stone-600'
+            }`}
+          >
+            Buyer Q&amp;A ({questions.filter((q) => !q.answer).length})
+            {activeTab === 'questions' && (
+              <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-stone-900" />
+            )}
+          </button>
+
+          <button
             onClick={() => setActiveTab('settings')}
             className={`pb-4 text-xs uppercase tracking-widest font-medium transition-colors whitespace-nowrap relative ${
               activeTab === 'settings' ? 'text-stone-900 font-semibold' : 'text-stone-400 hover:text-stone-600'
@@ -1217,6 +1281,45 @@ export default function SellerStudio() {
                     </div>
                   </div>
 
+                  {/* Buyer Return / Replacement Request */}
+                  {order.returnRequest && (
+                    <div className="mb-6 p-4 bg-amber-50/60 border border-amber-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div>
+                        <span className="text-[10px] uppercase tracking-widest font-semibold text-amber-900 block mb-1">
+                          {order.returnRequest.type} Request · {order.returnRequest.status}
+                        </span>
+                        <p className="text-stone-700">{order.returnRequest.reason}</p>
+                      </div>
+                      {order.returnRequest.status === 'Requested' && (
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleReturnAction(order.id, 'Approved')}
+                            className="px-3 py-1.5 bg-stone-900 text-white text-[10px] uppercase tracking-wider hover:bg-black"
+                          >
+                            Approve
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleReturnAction(order.id, 'Declined')}
+                            className="px-3 py-1.5 border border-stone-300 bg-white text-stone-700 text-[10px] uppercase tracking-wider hover:text-red-700"
+                          >
+                            Decline
+                          </button>
+                        </div>
+                      )}
+                      {order.returnRequest.status === 'Approved' && (
+                        <button
+                          type="button"
+                          onClick={() => handleReturnAction(order.id, 'Completed')}
+                          className="px-3 py-1.5 bg-emerald-800 text-white text-[10px] uppercase tracking-wider hover:bg-emerald-900 shrink-0"
+                        >
+                          Mark Completed
+                        </button>
+                      )}
+                    </div>
+                  )}
+
                   {/* Items List */}
                   <div className="divide-y divide-stone-100">
                     {order.items?.map((item, idx) => (
@@ -1237,6 +1340,58 @@ export default function SellerStudio() {
                     ))}
                   </div>
 
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {/* TAB 2B: BUYER Q&A */}
+        {activeTab === 'questions' && (
+          <div className="space-y-4">
+            {questions.length === 0 ? (
+              <div className="bg-white border border-stone-200 p-12 text-center">
+                <span className="text-stone-400 font-serif italic text-lg block mb-2">
+                  No buyer questions yet.
+                </span>
+                <p className="text-stone-500 text-xs">
+                  Questions asked by students on your product pages will appear here.
+                </p>
+              </div>
+            ) : (
+              questions.map((q) => (
+                <div key={q.id} className="bg-white border border-stone-200 p-6 shadow-sm space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] uppercase tracking-widest text-stone-400">
+                    <span>{q.productName || `Item #${q.productId}`} · Asked by {q.userName}</span>
+                    <span>{q.date}</span>
+                  </div>
+                  <p className="font-serif text-lg text-stone-900">{q.question}</p>
+
+                  {q.answer ? (
+                    <div className="p-4 bg-[#FAF9F6] border-l-2 border-stone-900 text-xs text-stone-700">
+                      <span className="text-[9px] uppercase tracking-widest text-stone-400 font-semibold block mb-1">
+                        Your Published Reply
+                      </span>
+                      <p className="text-sm text-stone-800">{q.answer}</p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col sm:flex-row gap-2 pt-2">
+                      <input
+                        type="text"
+                        value={replyDrafts[q.id] || ''}
+                        onChange={(e) => setReplyDrafts((prev) => ({ ...prev, [q.id]: e.target.value }))}
+                        placeholder="Write your reply to the student..."
+                        className="flex-1 bg-[#FAF9F6] border border-stone-200 px-3.5 py-2 text-xs text-stone-900 focus:border-stone-900 focus:bg-white focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleReplyQuestion(q.id)}
+                        className="px-5 py-2 bg-stone-900 text-white text-[10px] uppercase tracking-widest font-medium hover:bg-black transition-colors shrink-0"
+                      >
+                        Publish Reply
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))
             )}

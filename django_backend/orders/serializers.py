@@ -32,6 +32,7 @@ def format_order(order_doc: dict) -> dict:
         "paymentStatus": order_doc.get("paymentStatus", "Pending (Cash on Delivery)"),
         "shippingAddress": order_doc.get("shippingAddress", {}),
         "items": order_doc.get("items", []),
+        "returnRequest": order_doc.get("returnRequest"),
         "userEmail": order_doc.get("userEmail", ""),
         "userName": order_doc.get("userName", ""),
     }

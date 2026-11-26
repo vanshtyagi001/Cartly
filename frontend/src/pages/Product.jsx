@@ -33,6 +33,13 @@ export default function Product() {
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [reviewFeedback, setReviewFeedback] = useState('');
   const [reviewError, setReviewError] = useState('');
+
+  // Product Q&A state
+  const [questions, setQuestions] = useState([]);
+  const [questionInput, setQuestionInput] = useState('');
+  const [isSubmittingQuestion, setIsSubmittingQuestion] = useState(false);
+  const [questionFeedback, setQuestionFeedback] = useState('');
+  const [questionError, setQuestionError] = useState('');
   
   const { addToCart } = useCart(); 
   const { isWishlisted, toggleWishlist } = useWishlist();
@@ -59,8 +66,11 @@ export default function Product() {
       fetch(`${apiUrl}/api/products/${id}/reviews`)
         .then((res) => (res.ok ? res.json() : null))
         .catch(() => null),
+      fetch(`${apiUrl}/api/products/${id}/questions`)
+        .then((res) => (res.ok ? res.json() : null))
+        .catch(() => null),
     ])
-      .then(([data, revData]) => {
+      .then(([data, revData, qData]) => {
         const fetchedProd = data?.product || null;
         setProduct(fetchedProd);
         setSuggestions(Array.isArray(data?.suggestions) ? data.suggestions : []);
@@ -88,6 +98,11 @@ export default function Product() {
             distribution: revData.distribution || { '5': 0, '4': 0, '3': 0, '2': 0, '1': 0 },
             reviews: Array.isArray(revData.reviews) ? revData.reviews : [],
           });
+        }
+        if (qData && Array.isArray(qData.questions)) {
+          setQuestions(qData.questions);
+        } else {
+          setQuestions([]);
         }
         setIsLoading(false);
       })
@@ -145,6 +160,38 @@ export default function Product() {
       setReviewError(err.message || 'Could not submit review.');
     } finally {
       setIsSubmittingReview(false);
+    }
+  };
+
+  const handleQuestionSubmit = async (e) => {
+    e.preventDefault();
+    setQuestionError('');
+    setQuestionFeedback('');
+    if (!questionInput.trim()) {
+      setQuestionError('Please enter your question.');
+      return;
+    }
+
+    setIsSubmittingQuestion(true);
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    try {
+      const res = await fetch(`${apiUrl}/api/products/${id}/questions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ question: questionInput.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not submit question.');
+      if (Array.isArray(data.questions)) setQuestions(data.questions);
+      setQuestionInput('');
+      setQuestionFeedback(data.message || 'Question sent to seller.');
+    } catch (err) {
+      setQuestionError(err.message || 'Failed to send question.');
+    } finally {
+      setIsSubmittingQuestion(false);
     }
   };
 
@@ -639,6 +686,109 @@ export default function Product() {
 
                     <p className="text-sm text-stone-600 leading-relaxed">{rev.comment}</p>
                   </article>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* Product Q&A Section */}
+      <section id="questions" className="w-full bg-[#FAF9F6] border-t border-stone-200 py-16 lg:py-20">
+        <div className="max-w-[1400px] mx-auto px-8 md:px-12 grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-start">
+          {/* Left Column: Ask a Question */}
+          <div className="lg:col-span-4 space-y-6">
+            <div>
+              <span className="text-[10px] uppercase tracking-[0.25em] text-stone-400 font-medium block mb-1">
+                Pre-Purchase Clarity
+              </span>
+              <h2 className="text-2xl sm:text-3xl font-serif text-stone-900 tracking-tight">
+                Questions &amp; Answers
+              </h2>
+              <p className="text-xs text-stone-500 mt-2 leading-relaxed">
+                Have a question about dimensions, compatibility, or pickup? Ask the campus seller directly.
+              </p>
+            </div>
+
+            <div className="p-6 bg-white border border-stone-200">
+              {!isAuthenticated ? (
+                <div className="space-y-4">
+                  <p className="text-xs text-stone-500">Sign in to ask the seller a question.</p>
+                  <Link
+                    to="/login"
+                    state={{ from: { pathname: `/product/${id}` } }}
+                    className="inline-block w-full text-center bg-stone-900 text-white text-[10px] uppercase tracking-[0.2em] font-medium py-3.5 hover:bg-black transition-colors"
+                  >
+                    Sign In to Ask
+                  </Link>
+                </div>
+              ) : (
+                <form onSubmit={handleQuestionSubmit} className="space-y-4">
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-widest text-stone-500 mb-2">
+                      Ask the Seller
+                    </label>
+                    <textarea
+                      rows={3}
+                      required
+                      value={questionInput}
+                      onChange={(e) => setQuestionInput(e.target.value)}
+                      placeholder="e.g., Does this come with a warranty or charger?"
+                      className="w-full bg-[#FAF9F6] border border-stone-200 px-3.5 py-2.5 text-xs text-stone-900 focus:border-stone-900 focus:bg-white focus:outline-none resize-none"
+                    />
+                  </div>
+                  {questionError && (
+                    <p className="text-[11px] text-red-700 bg-red-50 border border-red-200 px-3 py-2">{questionError}</p>
+                  )}
+                  {questionFeedback && (
+                    <p className="text-[11px] text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-2">{questionFeedback}</p>
+                  )}
+                  <button
+                    type="submit"
+                    disabled={isSubmittingQuestion}
+                    className="w-full bg-stone-900 text-white text-[10px] uppercase tracking-[0.2em] font-medium py-3.5 hover:bg-black transition-colors disabled:opacity-50"
+                  >
+                    {isSubmittingQuestion ? 'Sending...' : 'Post Question'}
+                  </button>
+                </form>
+              )}
+            </div>
+          </div>
+
+          {/* Right Column: Questions List */}
+          <div className="lg:col-span-8">
+            {questions.length === 0 ? (
+              <div className="p-12 bg-white border border-stone-200 text-center">
+                <span className="font-serif italic text-lg text-stone-400 block mb-2">
+                  No questions asked yet.
+                </span>
+                <p className="text-xs text-stone-500">
+                  Be the first student to ask about this product.
+                </p>
+              </div>
+            ) : (
+              <div className="bg-white border border-stone-200 divide-y divide-stone-200">
+                {questions.map((q) => (
+                  <div key={q.id} className="p-6 space-y-3">
+                    <div className="flex items-center justify-between gap-2 text-[11px] text-stone-400">
+                      <span className="uppercase tracking-wider font-semibold text-stone-700">
+                        Q · {q.userName}
+                      </span>
+                      <span>{q.date}</span>
+                    </div>
+                    <p className="font-serif text-base text-stone-900">{q.question}</p>
+                    {q.answer ? (
+                      <div className="p-4 bg-[#FAF9F6] border-l-2 border-stone-900 text-xs text-stone-700 space-y-1">
+                        <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-stone-500 font-semibold">
+                          <span>Answer from {q.answeredBy || 'Campus Seller'}</span>
+                          {q.answeredDate && <span>{q.answeredDate}</span>}
+                        </div>
+                        <p className="text-sm text-stone-800 leading-relaxed pt-1">{q.answer}</p>
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-stone-400 italic">Awaiting seller response...</p>
+                    )}
+                  </div>
                 ))}
               </div>
             )}

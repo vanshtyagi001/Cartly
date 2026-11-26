@@ -8,6 +8,8 @@ from .views import (
     SellerProductDetailView,
     SellerProductListCreateView,
     SellerProfileView,
+    SellerQuestionsView,
+    SellerReturnActionView,
 )
 
 urlpatterns = [
@@ -19,4 +21,7 @@ urlpatterns = [
     path("products/<int:product_id>", SellerProductDetailView.as_view(), name="seller-product-detail"),
     path("orders", SellerOrdersView.as_view(), name="seller-orders"),
     path("orders/<str:order_id>/status", SellerOrderStatusUpdateView.as_view(), name="seller-order-status"),
+    path("orders/<str:order_id>/return", SellerReturnActionView.as_view(), name="seller-order-return"),
+    path("questions", SellerQuestionsView.as_view(), name="seller-questions"),
+    path("questions/<str:question_id>", SellerQuestionsView.as_view(), name="seller-question-reply"),
 ]

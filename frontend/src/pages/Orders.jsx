@@ -38,8 +38,42 @@ export default function Orders() {
   const [isCancellingOrder, setIsCancellingOrder] = useState(false);
   const [cancelError, setCancelError] = useState('');
   const [cancelSuccess, setCancelSuccess] = useState('');
+  const [isRequestingReturn, setIsRequestingReturn] = useState(false);
+  const [returnForm, setReturnForm] = useState({ type: 'Return', reason: '' });
+  const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
 
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
+  const handleReturnSubmit = async (e, orderId) => {
+    e.preventDefault();
+    if (!returnForm.reason.trim()) return;
+    setCancelError('');
+    setCancelSuccess('');
+    setIsSubmittingReturn(true);
+    try {
+      const res = await fetch(`${API_URL}/api/orders/${orderId}/return`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(returnForm),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not submit return request.');
+      if (data.order) {
+        setOrders((prev) => prev.map((o) => (o.id === orderId ? data.order : o)));
+        setSelectedOrder(data.order);
+      }
+      setIsRequestingReturn(false);
+      setReturnForm({ type: 'Return', reason: '' });
+      setCancelSuccess(data.message || 'Return request submitted.');
+    } catch (err) {
+      setCancelError(err.message || 'Failed to submit return request.');
+    } finally {
+      setIsSubmittingReturn(false);
+    }
+  };
 
   const handleCancelOrder = async (orderId) => {
     setCancelError('');
@@ -382,6 +416,65 @@ export default function Orders() {
               </div>
             )}
 
+            {selectedOrder.returnRequest && (
+              <div className="mb-6 p-4 bg-[#FAF9F6] border border-stone-200 text-xs space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] uppercase tracking-widest font-semibold text-stone-700">
+                    {selectedOrder.returnRequest.type} Request
+                  </span>
+                  <span className="text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 bg-white border border-stone-300 text-stone-800">
+                    {selectedOrder.returnRequest.status}
+                  </span>
+                </div>
+                <p className="text-stone-600">{selectedOrder.returnRequest.reason}</p>
+              </div>
+            )}
+
+            {isRequestingReturn && selectedOrder.status === 'Delivered' && !selectedOrder.returnRequest && (
+              <form
+                onSubmit={(e) => handleReturnSubmit(e, selectedOrder.id)}
+                className="mb-6 p-5 bg-[#FAF9F6] border border-stone-300 space-y-4"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] uppercase tracking-widest font-semibold text-stone-800">
+                    7-Day Return / Replacement Request
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setIsRequestingReturn(false)}
+                    className="text-[10px] uppercase tracking-widest text-stone-500 hover:text-stone-900"
+                  >
+                    Cancel
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <select
+                    value={returnForm.type}
+                    onChange={(e) => setReturnForm((p) => ({ ...p, type: e.target.value }))}
+                    className="bg-white border border-stone-200 px-3 py-2 text-xs focus:border-stone-900 focus:outline-none"
+                  >
+                    <option value="Return">Return &amp; Refund</option>
+                    <option value="Replacement">Replacement</option>
+                  </select>
+                  <input
+                    type="text"
+                    required
+                    value={returnForm.reason}
+                    onChange={(e) => setReturnForm((p) => ({ ...p, reason: e.target.value }))}
+                    placeholder="Reason (e.g., damaged item, wrong size)"
+                    className="sm:col-span-2 bg-white border border-stone-200 px-3 py-2 text-xs focus:border-stone-900 focus:outline-none"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={isSubmittingReturn}
+                  className="bg-stone-900 text-white text-[10px] uppercase tracking-widest px-5 py-2.5 hover:bg-black transition-colors disabled:opacity-50"
+                >
+                  {isSubmittingReturn ? 'Submitting...' : 'Submit Request'}
+                </button>
+              </form>
+            )}
+
             {/* Actions */}
             <div className="flex flex-wrap items-center justify-between gap-4 pt-6 border-t border-stone-200">
               <div className="flex flex-wrap items-center gap-3">
@@ -404,6 +497,20 @@ export default function Orders() {
                     className="text-[10px] uppercase tracking-widest text-red-700 hover:text-red-900 border border-red-200 px-4 py-2.5 bg-red-50/60 hover:bg-red-50 transition-colors"
                   >
                     Cancel Order
+                  </button>
+                )}
+
+                {isAuthenticated && selectedOrder.status === 'Delivered' && !selectedOrder.returnRequest && !isRequestingReturn && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCancelError('');
+                      setCancelSuccess('');
+                      setIsRequestingReturn(true);
+                    }}
+                    className="text-[10px] uppercase tracking-widest text-stone-800 hover:text-black border border-stone-300 px-4 py-2.5 bg-white transition-colors"
+                  >
+                    Request Return / Replacement
                   </button>
                 )}
               </div>

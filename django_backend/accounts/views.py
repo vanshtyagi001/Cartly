@@ -1,7 +1,9 @@
 from datetime import datetime, timezone
+from bson import ObjectId
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from products.repository import get_notifications_collection
 
 from .auth import (
     generate_token,
@@ -213,3 +215,56 @@ class WishlistView(APIView):
         users_col.update_one({"_id": user["_id"]}, {"$pull": {"wishlist": product_id}})
         updated = users_col.find_one({"_id": user["_id"]})
         return Response({"wishlist": updated.get("wishlist", [])}, status=status.HTTP_200_OK)
+
+
+class NotificationsView(APIView):
+    def get(self, request):
+        user = get_user_from_request(request)
+        if not user:
+            return Response({"error": "Authentication required."}, status=status.HTTP_401_UNAUTHORIZED)
+
+        user_id = str(user["_id"])
+        email = str(user.get("email", "")).strip().lower()
+        query = {"$or": [{"userId": user_id}]}
+        if email:
+            query["$or"].append({"email": email})
+
+        col = get_notifications_collection()
+        docs = list(col.find(query).sort("createdAt", -1).limit(15))
+        items = []
+        unread_count = 0
+        for d in docs:
+            is_read = bool(d.get("read", False))
+            if not is_read:
+                unread_count += 1
+            created = d.get("createdAt")
+            items.append({
+                "id": str(d["_id"]),
+                "title": d.get("title", ""),
+                "message": d.get("message", ""),
+                "link": d.get("link", "/"),
+                "read": is_read,
+                "date": created.strftime("%b %d, %I:%M %p") if isinstance(created, datetime) else "",
+            })
+
+        return Response({"notifications": items, "unreadCount": unread_count}, status=status.HTTP_200_OK)
+
+    def patch(self, request):
+        user = get_user_from_request(request)
+        if not user:
+            return Response({"error": "Authentication required."}, status=status.HTTP_401_UNAUTHORIZED)
+
+        user_id = str(user["_id"])
+        email = str(user.get("email", "")).strip().lower()
+        query = {"$or": [{"userId": user_id}]}
+        if email:
+            query["$or"].append({"email": email})
+
+        notif_id = (request.data or {}).get("id")
+        col = get_notifications_collection()
+        if notif_id and ObjectId.is_valid(str(notif_id)):
+            col.update_one({"_id": ObjectId(str(notif_id)), **query}, {"$set": {"read": True}})
+        else:
+            col.update_many(query, {"$set": {"read": True}})
+
+        return Response({"message": "Notifications marked as read."}, status=status.HTTP_200_OK)

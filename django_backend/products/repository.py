@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from functools import lru_cache
 
 from django.conf import settings
@@ -45,3 +46,31 @@ def get_newsletter_collection():
 
 def get_coupons_collection():
     return _get_db()["coupons"]
+
+
+def get_questions_collection():
+    return _get_db()["product_questions"]
+
+
+def get_notifications_collection():
+    return _get_db()["notifications"]
+
+
+def create_notification(user_id=None, email=None, title="", message="", link="/"):
+    """Insert an in-app notification for a user by userId and/or email."""
+    if not user_id and not email:
+        return
+    now = datetime.now(timezone.utc)
+    doc = {
+        "userId": str(user_id) if user_id else None,
+        "email": str(email).strip().lower() if email else None,
+        "title": title,
+        "message": message,
+        "link": link,
+        "read": False,
+        "createdAt": now,
+    }
+    try:
+        get_notifications_collection().insert_one(doc)
+    except Exception:
+        pass

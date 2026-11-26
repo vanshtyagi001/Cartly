@@ -6,9 +6,11 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .repository import (
+    create_notification,
     get_categories_collection,
     get_collection,
     get_newsletter_collection,
+    get_questions_collection,
     get_reviews_collection,
     get_stock_alerts_collection,
     get_support_tickets_collection,
@@ -364,5 +366,76 @@ class NewsletterSubscribeView(APIView):
         )
         return Response(
             {"message": "Subscribed to the Cartly dispatch.", "email": clean_email},
+            status=201,
+        )
+
+
+def _format_question(doc):
+    created = doc.get("createdAt")
+    answered_at = doc.get("answeredAt")
+    return {
+        "id": str(doc["_id"]),
+        "productId": doc.get("productId"),
+        "productName": doc.get("productName", ""),
+        "userName": doc.get("userName", "Campus Student"),
+        "question": doc.get("question", ""),
+        "answer": doc.get("answer", ""),
+        "answeredBy": doc.get("answeredBy", ""),
+        "date": created.strftime("%b %d, %Y") if isinstance(created, datetime) else "",
+        "answeredDate": answered_at.strftime("%b %d, %Y") if isinstance(answered_at, datetime) else "",
+    }
+
+
+class ProductQuestionsView(APIView):
+    def get(self, request, product_id):
+        try:
+            docs = list(get_questions_collection().find({"productId": product_id}).sort("createdAt", -1))
+            return Response({"questions": [_format_question(d) for d in docs]})
+        except Exception as error:
+            return Response({"error": str(error)}, status=500)
+
+    def post(self, request, product_id):
+        user = get_user_from_request(request)
+        if not user:
+            return Response({"error": "Please sign in to ask a question."}, status=401)
+
+        question = str((request.data or {}).get("question", "")).strip()
+        if not question:
+            return Response({"error": "Please enter your question."}, status=400)
+
+        prod = get_collection().find_one({"productId": product_id})
+        if not prod:
+            return Response({"error": "Product not found."}, status=404)
+
+        now = datetime.now(timezone.utc)
+        doc = {
+            "productId": product_id,
+            "productName": prod.get("name", ""),
+            "sellerId": prod.get("sellerId"),
+            "userId": str(user["_id"]),
+            "userName": user.get("name", "Campus Student"),
+            "question": question,
+            "answer": "",
+            "answeredBy": "",
+            "answeredAt": None,
+            "createdAt": now,
+        }
+        ins = get_questions_collection().insert_one(doc)
+        doc["_id"] = ins.inserted_id
+
+        if prod.get("sellerId"):
+            create_notification(
+                user_id=prod.get("sellerId"),
+                title=f"New Question on {prod.get('name', 'Product')}",
+                message=question[:100],
+                link="/seller",
+            )
+
+        docs = list(get_questions_collection().find({"productId": product_id}).sort("createdAt", -1))
+        return Response(
+            {
+                "message": "Your question has been sent to the campus seller.",
+                "questions": [_format_question(d) for d in docs],
+            },
             status=201,
         )

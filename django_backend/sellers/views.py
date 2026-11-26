@@ -8,7 +8,12 @@ from accounts.auth import get_user_from_request, serialize_user
 from accounts.repository import get_users_collection
 from orders.repository import get_orders_collection
 from orders.serializers import format_order
-from products.repository import get_collection as get_products_collection, get_stock_alerts_collection
+from products.repository import (
+    create_notification,
+    get_collection as get_products_collection,
+    get_questions_collection,
+    get_stock_alerts_collection,
+)
 from products.serializers import format_product, normalize_product_images
 
 
@@ -325,8 +330,28 @@ class SellerProductDetailView(APIView):
         if "inStock" in data:
             update_fields["inStock"] = bool(data["inStock"])
 
+        old_stock = int(prod.get("stock", 0) or 0)
         products_col.update_one({"_id": prod["_id"]}, {"$set": update_fields})
         updated = products_col.find_one({"_id": prod["_id"]})
+
+        # Automated Restock Alert Trigger
+        new_stock_val = int(updated.get("stock", 0) or 0)
+        if old_stock <= 0 and new_stock_val > 0:
+            alerts_col = get_stock_alerts_collection()
+            waiting = list(alerts_col.find({"productId": product_id, "notified": {"$ne": True}}))
+            for w in waiting:
+                create_notification(
+                    email=w.get("email"),
+                    title=f"Back in Stock: {updated.get('name', 'Item')}",
+                    message=f"{updated.get('name', 'This item')} now has {new_stock_val} in stock.",
+                    link=f"/product/{product_id}",
+                )
+            if waiting:
+                alerts_col.update_many(
+                    {"productId": product_id, "notified": {"$ne": True}},
+                    {"$set": {"notified": True, "notifiedAt": datetime.now(timezone.utc)}},
+                )
+
         return Response(
             {
                 "message": "Product listing updated successfully.",
@@ -394,19 +419,76 @@ class SellerOrderStatusUpdateView(APIView):
             )
 
         orders_col = get_orders_collection()
-        result = orders_col.update_one(
-            {"$or": [{"orderId": order_id}, {"_id": order_id}]},
-            {"$set": {"status": new_status, "updatedAt": datetime.now(timezone.utc)}},
-        )
-
-        if result.matched_count == 0:
+        order_doc = orders_col.find_one({"$or": [{"orderId": order_id}, {"_id": order_id}]})
+        if not order_doc:
             return Response(
                 {"error": "Order not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        orders_col.update_one(
+            {"_id": order_doc["_id"]},
+            {"$set": {"status": new_status, "updatedAt": datetime.now(timezone.utc)}},
+        )
+
+        # Notify buyer of status update
+        if order_doc.get("userId") or order_doc.get("userEmail"):
+            create_notification(
+                user_id=order_doc.get("userId"),
+                email=order_doc.get("userEmail"),
+                title=f"Order #{order_doc.get('orderId', order_id)} Update",
+                message=f"Your order status is now '{new_status}'.",
+                link="/orders",
+            )
+
         return Response(
             {"message": f"Order #{order_id} marked as '{new_status}'."},
+            status=status.HTTP_200_OK,
+        )
+
+
+class SellerReturnActionView(APIView):
+    def patch(self, request, order_id):
+        is_ok, res = check_is_approved_seller(request)
+        if not is_ok:
+            return res
+
+        new_status = str((request.data or {}).get("status", "")).strip()
+        if new_status not in ("Approved", "Completed", "Declined"):
+            return Response(
+                {"error": "Status must be 'Approved', 'Completed', or 'Declined'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        orders_col = get_orders_collection()
+        order_doc = orders_col.find_one({"$or": [{"orderId": order_id}, {"_id": order_id}]})
+        if not order_doc or not order_doc.get("returnRequest"):
+            return Response({"error": "Return request not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        now = datetime.now(timezone.utc)
+        orders_col.update_one(
+            {"_id": order_doc["_id"]},
+            {
+                "$set": {
+                    "returnRequest.status": new_status,
+                    "returnRequest.updatedAt": now.isoformat(),
+                    "updatedAt": now,
+                }
+            },
+        )
+
+        if order_doc.get("userId") or order_doc.get("userEmail"):
+            req_type = order_doc["returnRequest"].get("type", "Return")
+            create_notification(
+                user_id=order_doc.get("userId"),
+                email=order_doc.get("userEmail"),
+                title=f"{req_type} {new_status} (#{order_doc.get('orderId', order_id)})",
+                message=f"Your {req_type.lower()} request has been marked as {new_status}.",
+                link="/orders",
+            )
+
+        return Response(
+            {"message": f"Return request marked as '{new_status}'."},
             status=status.HTTP_200_OK,
         )
 
@@ -538,4 +620,66 @@ class PublicSellerStoreView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+class SellerQuestionsView(APIView):
+    def get(self, request):
+        is_ok, res = check_is_approved_seller(request)
+        if not is_ok:
+            return res
+        user = res
+
+        user_id = str(user["_id"])
+        docs = list(get_questions_collection().find({"sellerId": user_id}).sort("createdAt", -1))
+        questions = []
+        for d in docs:
+            created = d.get("createdAt")
+            questions.append({
+                "id": str(d["_id"]),
+                "productId": d.get("productId"),
+                "productName": d.get("productName", ""),
+                "userName": d.get("userName", "Campus Student"),
+                "question": d.get("question", ""),
+                "answer": d.get("answer", ""),
+                "answeredBy": d.get("answeredBy", ""),
+                "date": created.strftime("%b %d, %Y") if isinstance(created, datetime) else "",
+            })
+        return Response({"questions": questions}, status=status.HTTP_200_OK)
+
+    def patch(self, request, question_id):
+        is_ok, res = check_is_approved_seller(request)
+        if not is_ok:
+            return res
+        user = res
+
+        answer = str((request.data or {}).get("answer", "")).strip()
+        if not answer:
+            return Response({"error": "Reply cannot be empty."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            oid = ObjectId(question_id)
+        except Exception:
+            return Response({"error": "Invalid question ID."}, status=status.HTTP_400_BAD_REQUEST)
+
+        q_col = get_questions_collection()
+        q_doc = q_col.find_one({"_id": oid, "sellerId": str(user["_id"])})
+        if not q_doc:
+            return Response({"error": "Question not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        store_name = (user.get("sellerProfile") or {}).get("storeName") or user.get("name", "Seller")
+        now = datetime.now(timezone.utc)
+        q_col.update_one(
+            {"_id": oid},
+            {"$set": {"answer": answer, "answeredBy": store_name, "answeredAt": now}},
+        )
+
+        if q_doc.get("userId"):
+            create_notification(
+                user_id=q_doc.get("userId"),
+                title=f"Seller replied on {q_doc.get('productName', 'your question')}",
+                message=answer[:100],
+                link=f"/product/{q_doc.get('productId')}",
+            )
+
+        return Response({"message": "Reply published."}, status=status.HTTP_200_OK)
 

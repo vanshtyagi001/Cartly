@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.auth import get_user_from_request
-from products.repository import get_collection as get_products_collection, get_coupons_collection
+from products.repository import create_notification, get_collection as get_products_collection, get_coupons_collection
 from .repository import get_orders_collection
 from .serializers import format_order, generate_order_id
 
@@ -210,6 +210,19 @@ class OrderListCreateView(APIView):
                             },
                         )
 
+            # Notify each seller involved in this order
+            notified_sellers = set()
+            for it in sanitized_items:
+                sid = it.get("sellerId")
+                if sid and sid not in notified_sellers:
+                    notified_sellers.add(sid)
+                    create_notification(
+                        user_id=sid,
+                        title=f"New Order #{order_doc['orderId']}",
+                        message=f"Ordered by {full_name} ({hostel_block}, Room {room_number}).",
+                        link="/seller",
+                    )
+
             return Response(
                 {
                     "message": "Order placed successfully via Cash on Delivery!",
@@ -370,6 +383,74 @@ class ValidateCouponView(APIView):
                 "code": clean_code,
                 "discountAmount": discount,
                 "message": message,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class OrderReturnRequestView(APIView):
+    def post(self, request, order_id):
+        user = get_user_from_request(request)
+        if not user:
+            return Response({"error": "Please sign in to request a return."}, status=status.HTTP_401_UNAUTHORIZED)
+
+        orders_col = get_orders_collection()
+        doc = orders_col.find_one({"orderId": order_id})
+        if not doc and ObjectId.is_valid(order_id):
+            doc = orders_col.find_one({"_id": ObjectId(order_id)})
+        if not doc:
+            return Response({"error": "Order not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        user_id = str(user["_id"])
+        user_email = str(user.get("email", "")).lower()
+        owns_order = doc.get("userId") == user_id or (user_email and str(doc.get("userEmail", "")).lower() == user_email)
+        if not owns_order:
+            return Response({"error": "Unauthorized."}, status=status.HTTP_403_FORBIDDEN)
+
+        if doc.get("status") != "Delivered":
+            return Response({"error": "Returns or replacements can only be requested for delivered orders."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if doc.get("returnRequest"):
+            return Response({"error": "A return/replacement request has already been submitted for this order."}, status=status.HTTP_400_BAD_REQUEST)
+
+        data = request.data or {}
+        req_type = str(data.get("type", "Return")).strip()
+        if req_type not in ("Return", "Replacement"):
+            req_type = "Return"
+        reason = str(data.get("reason", "")).strip()
+        if not reason:
+            return Response({"error": "Please describe the reason for your request."}, status=status.HTTP_400_BAD_REQUEST)
+
+        now = datetime.now(timezone.utc)
+        return_req = {
+            "type": req_type,
+            "reason": reason,
+            "status": "Requested",
+            "requestedAt": now.isoformat(),
+        }
+        orders_col.update_one(
+            {"_id": doc["_id"]},
+            {"$set": {"returnRequest": return_req, "updatedAt": now}},
+        )
+
+        # Notify sellers
+        notified_sellers = set()
+        for it in doc.get("items", []):
+            sid = it.get("sellerId")
+            if sid and sid not in notified_sellers:
+                notified_sellers.add(sid)
+                create_notification(
+                    user_id=sid,
+                    title=f"{req_type} Requested on #{doc.get('orderId', order_id)}",
+                    message=reason[:100],
+                    link="/seller",
+                )
+
+        updated_doc = orders_col.find_one({"_id": doc["_id"]})
+        return Response(
+            {
+                "message": f"{req_type} request submitted for Order #{doc.get('orderId', order_id)}.",
+                "order": format_order(updated_doc),
             },
             status=status.HTTP_200_OK,
         )

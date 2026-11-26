@@ -6,13 +6,53 @@ import { useWishlist } from '../context/WishlistContext';
 
 export default function Navbar() {
   const { setIsCartOpen, cartCount } = useCart();
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, token, isAuthenticated, logout } = useAuth();
   const { wishlistIds } = useWishlist();
   const navigate = useNavigate();
   const location = useLocation();
 
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   const userMenuRef = useRef(null);
+  const notifRef = useRef(null);
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
+  const fetchNotifications = async () => {
+    if (!isAuthenticated || !token) return;
+    try {
+      const res = await fetch(`${API_URL}/api/auth/notifications`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setNotifications(data.notifications || []);
+        setUnreadCount(data.unreadCount || 0);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    fetchNotifications();
+  }, [isAuthenticated, token, location.pathname]);
+
+  const handleMarkAllRead = async () => {
+    if (!token) return;
+    try {
+      await fetch(`${API_URL}/api/auth/notifications`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({}),
+      });
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+      setUnreadCount(0);
+    } catch {
+      // ignore
+    }
+  };
 
   // Easter Egg State
   const originalLogo = "Cartly.";
@@ -40,11 +80,14 @@ export default function Navbar() {
       .catch(() => {});
   }, []);
 
-  // Close user dropdown when clicking outside
+  // Close user & notification dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
         setIsUserMenuOpen(false);
+      }
+      if (notifRef.current && !notifRef.current.contains(event.target)) {
+        setIsNotifOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -282,6 +325,72 @@ export default function Navbar() {
             </svg>
             <span>Sign In</span>
           </Link>
+        )}
+
+        {/* Notification Bell for Signed-In Users */}
+        {isAuthenticated && (
+          <div className="relative" ref={notifRef}>
+            <button
+              type="button"
+              onClick={() => {
+                setIsNotifOpen((prev) => !prev);
+                if (!isNotifOpen) fetchNotifications();
+              }}
+              className="relative p-2 text-stone-700 hover:text-stone-900 transition-colors"
+              aria-label="Notifications"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              </svg>
+              {unreadCount > 0 && (
+                <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-stone-900" />
+              )}
+            </button>
+
+            {isNotifOpen && (
+              <div className="absolute right-0 top-[calc(100%+0.75rem)] w-80 bg-white border border-stone-200 shadow-xl z-50">
+                <div className="px-4 py-3 border-b border-stone-100 flex items-center justify-between">
+                  <span className="text-[10px] uppercase tracking-widest font-semibold text-stone-800">
+                    Notifications {unreadCount > 0 ? `(${unreadCount})` : ''}
+                  </span>
+                  {unreadCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleMarkAllRead}
+                      className="text-[10px] uppercase tracking-wider text-stone-400 hover:text-stone-900 underline"
+                    >
+                      Mark all read
+                    </button>
+                  )}
+                </div>
+                <div className="max-h-72 overflow-y-auto divide-y divide-stone-100">
+                  {notifications.length === 0 ? (
+                    <p className="p-6 text-center text-xs text-stone-400 font-serif italic">
+                      No notifications yet.
+                    </p>
+                  ) : (
+                    notifications.map((n) => (
+                      <Link
+                        key={n.id}
+                        to={n.link || '/'}
+                        onClick={() => setIsNotifOpen(false)}
+                        className={`block px-4 py-3 hover:bg-stone-50 transition-colors ${
+                          !n.read ? 'bg-[#FAF9F6]' : ''
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2 mb-0.5">
+                          <span className="text-xs font-medium text-stone-900 truncate">{n.title}</span>
+                          {!n.read && <span className="w-1.5 h-1.5 rounded-full bg-stone-900 shrink-0" />}
+                        </div>
+                        <p className="text-[11px] text-stone-500 line-clamp-2">{n.message}</p>
+                        {n.date && <span className="text-[9px] text-stone-400 mt-1 block">{n.date}</span>}
+                      </Link>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         )}
 
         {/* Cart Drawer Trigger */}
