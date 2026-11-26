@@ -133,28 +133,30 @@ export default function Shop() {
     <main className="flex-1 w-full bg-white border-t border-stone-200 min-h-[calc(100vh-88px)]">
       <div className="max-w-[1600px] mx-auto px-8 md:px-12 flex flex-col md:flex-row items-stretch">
         
-        {/* Left Sidebar - Architectural Vertical Column */}
-        <aside className="w-full md:w-56 shrink-0 flex flex-col pt-16 pr-8 md:pr-12 md:border-r border-stone-200">
-          <h3 className="text-[9px] font-semibold text-stone-400 uppercase tracking-[0.2em] mb-10">Categories</h3>
-          <ul className="flex flex-col space-y-5">
-            {categories.map((cat) => (
-              <li key={cat}>
-                {/* Custom Left-to-Right Underline Hover Interaction */}
-                <button 
-                  onClick={() => handleCategoryClick(cat)}
-                  className={`relative text-left w-fit text-[11px] uppercase tracking-[0.15em] transition-colors duration-300 pb-1 
-                    after:absolute after:bottom-0 after:left-0 after:h-[1px] after:bg-stone-900 after:transition-all after:duration-[400ms] after:ease-[cubic-bezier(0.25,0.1,0.25,1)]
-                    ${
-                    activeCategory === cat 
-                      ? 'text-stone-900 font-semibold after:w-full' 
-                      : 'text-stone-400 hover:text-stone-900 after:w-0 hover:after:w-full'
-                  }`}
-                >
-                  {cat}
-                </button>
-              </li>
-            ))}
-          </ul>
+        {/* Left Sidebar - Architectural Sticky Vertical Column */}
+        <aside className="w-full md:w-56 shrink-0 md:border-r border-stone-200">
+          <div className="md:sticky md:top-[88px] flex flex-col pt-12 md:pt-16 pb-12 pr-8 md:pr-12 max-h-[calc(100vh-88px)] overflow-y-auto">
+            <h3 className="text-[9px] font-semibold text-stone-400 uppercase tracking-[0.2em] mb-8">Categories</h3>
+            <ul className="flex flex-col space-y-5">
+              {categories.map((cat) => (
+                <li key={cat}>
+                  {/* Custom Left-to-Right Underline Hover Interaction */}
+                  <button 
+                    onClick={() => handleCategoryClick(cat)}
+                    className={`relative text-left w-fit text-[11px] uppercase tracking-[0.15em] transition-colors duration-300 pb-1 
+                      after:absolute after:bottom-0 after:left-0 after:h-[1px] after:bg-stone-900 after:transition-all after:duration-[400ms] after:ease-[cubic-bezier(0.25,0.1,0.25,1)]
+                      ${
+                      activeCategory === cat 
+                        ? 'text-stone-900 font-semibold after:w-full' 
+                        : 'text-stone-400 hover:text-stone-900 after:w-0 hover:after:w-full'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
         </aside>
 
         {/* Right Content Area */}
