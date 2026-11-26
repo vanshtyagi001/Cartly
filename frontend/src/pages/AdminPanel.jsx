@@ -56,6 +56,16 @@ export default function AdminPanel() {
   const [coupons, setCoupons] = useState([]);
   const [newCoupon, setNewCoupon] = useState({ code: '', discountType: 'percent', discountValue: '', minOrder: '' });
   const [isSavingCoupon, setIsSavingCoupon] = useState(false);
+  const [adminInsights, setAdminInsights] = useState({
+    statusBreakdown: {},
+    categoryRevenue: {},
+    topStores: [],
+    actionQueue: { pendingSellers: 0, openTickets: 0, outOfStockProducts: 0, pendingReturns: 0 },
+  });
+  const [orderStatusFilter, setOrderStatusFilter] = useState('all');
+  const [catalogCategoryFilter, setCatalogCategoryFilter] = useState('all');
+  const [catalogStockFilter, setCatalogStockFilter] = useState('all');
+  const [userSearch, setUserSearch] = useState('');
   const [catalogViewMode, setCatalogViewMode] = useState('tiles'); // 'tiles' | 'table'
   const [catalogPage, setCatalogPage] = useState(1);
   const [catalogPageSize, setCatalogPageSize] = useState(8);
@@ -111,11 +121,17 @@ export default function AdminPanel() {
     try {
       const headers = { Authorization: `Bearer ${adminToken}` };
 
-      // 1. Metrics
+      // 1. Metrics & Insights
       const mRes = await fetch(`${API_URL}/api/admin/metrics`, { headers });
       if (mRes.ok) {
         const mData = await mRes.json();
         setMetrics(mData.metrics || {});
+        setAdminInsights({
+          statusBreakdown: mData.statusBreakdown || {},
+          categoryRevenue: mData.categoryRevenue || {},
+          topStores: mData.topStores || [],
+          actionQueue: mData.actionQueue || { pendingSellers: 0, openTickets: 0, outOfStockProducts: 0, pendingReturns: 0 },
+        });
       }
 
       // 2. Orders
@@ -292,10 +308,13 @@ export default function AdminPanel() {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${adminToken}` },
       });
-      if (res.ok) {
-        showNotice('User administrative permission updated.');
-        fetchAdminData();
+      const data = await res.json();
+      if (!res.ok) {
+        showNotice(data.error || 'Could not update admin role.');
+        return;
       }
+      showNotice(data.message || 'User administrative permission updated.');
+      fetchAdminData();
     } catch (err) {
       console.error('Toggle admin failed:', err);
     }
@@ -583,6 +602,51 @@ export default function AdminPanel() {
     }
   };
 
+  const handleAdminReturnAction = async (orderId, nextStatus) => {
+    try {
+      const res = await fetch(`${API_URL}/api/admin/orders/${orderId}/return`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update return request.');
+      showNotice(data.message || `Return marked as ${nextStatus}.`);
+      setSelectedAdminOrder(null);
+      fetchAdminData();
+    } catch (err) {
+      showNotice(err.message || 'Error updating return request.');
+    }
+  };
+
+  const handleExportOrdersCsv = () => {
+    const headers = ['Order ID', 'Date', 'Student Name', 'Hostel Block', 'Room', 'Phone', 'Items', 'Total', 'Status', 'Return Status'];
+    const escapeCsv = (val) => `"${String(val ?? '').replace(/"/g, '""')}"`;
+    const rows = filteredOrders.map((o) => [
+      o.id,
+      o.date,
+      o.shippingAddress?.fullName || o.userName || '',
+      o.shippingAddress?.hostelBlock || '',
+      o.shippingAddress?.roomNumber || '',
+      o.shippingAddress?.phone || '',
+      (o.items || []).map((i) => `${i.name} (x${i.quantity})`).join('; '),
+      o.rawTotal ?? o.total,
+      o.status || 'Confirmed',
+      o.returnRequest ? `${o.returnRequest.type}: ${o.returnRequest.status}` : '',
+    ]);
+    const csv = [headers.map(escapeCsv).join(','), ...rows.map((r) => r.map(escapeCsv).join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `cartly-orders-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   // Dedicated Admin Login screen if not authenticated
   if (!adminToken || !adminUser?.isAdmin) {
     return (
@@ -655,16 +719,37 @@ export default function AdminPanel() {
     );
   }
 
-  const filteredOrders = orders.filter(o => 
-    o.id.toLowerCase().includes(orderSearch.toLowerCase()) ||
-    (o.shippingAddress?.fullName && o.shippingAddress.fullName.toLowerCase().includes(orderSearch.toLowerCase())) ||
-    (o.userName && o.userName.toLowerCase().includes(orderSearch.toLowerCase()))
-  );
+  const filteredOrders = orders.filter((o) => {
+    const q = orderSearch.toLowerCase().trim();
+    const matchesSearch =
+      !q ||
+      o.id.toLowerCase().includes(q) ||
+      (o.shippingAddress?.fullName && o.shippingAddress.fullName.toLowerCase().includes(q)) ||
+      (o.shippingAddress?.hostelBlock && o.shippingAddress.hostelBlock.toLowerCase().includes(q)) ||
+      (o.userName && o.userName.toLowerCase().includes(q));
+    if (!matchesSearch) return false;
 
-  const filteredProducts = products.filter(p =>
-    p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
-    p.category.toLowerCase().includes(productSearch.toLowerCase())
-  );
+    if (orderStatusFilter === 'return') return Boolean(o.returnRequest);
+    if (orderStatusFilter !== 'all') return (o.status || 'Confirmed') === orderStatusFilter;
+    return true;
+  });
+
+  const filteredProducts = products.filter((p) => {
+    const q = productSearch.toLowerCase().trim();
+    const matchesSearch =
+      !q ||
+      p.name.toLowerCase().includes(q) ||
+      p.category.toLowerCase().includes(q) ||
+      String(p.id).includes(q) ||
+      (p.sellerName && p.sellerName.toLowerCase().includes(q));
+    if (!matchesSearch) return false;
+
+    if (catalogCategoryFilter !== 'all' && p.category !== catalogCategoryFilter) return false;
+    const stk = p.stock !== undefined ? Number(p.stock) : 25;
+    if (catalogStockFilter === 'low' && (stk <= 0 || stk > 5)) return false;
+    if (catalogStockFilter === 'out' && stk > 0) return false;
+    return true;
+  });
 
   const totalCatalogItems = filteredProducts.length;
   const totalCatalogPages = Math.max(1, Math.ceil(totalCatalogItems / catalogPageSize));
@@ -1227,6 +1312,12 @@ export default function AdminPanel() {
                   <span>Items Subtotal</span>
                   <span>{selectedAdminOrder.subtotal ? `₹${Number(selectedAdminOrder.subtotal).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : selectedAdminOrder.total}</span>
                 </div>
+                {selectedAdminOrder.discountAmount > 0 && (
+                  <div className="flex justify-between text-emerald-700">
+                    <span>Promo ({selectedAdminOrder.couponCode})</span>
+                    <span>− ₹{Number(selectedAdminOrder.discountAmount).toFixed(2)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-stone-500">
                   <span>Campus Courier</span>
                   <span className="text-emerald-700 font-medium">Free</span>
@@ -1244,6 +1335,46 @@ export default function AdminPanel() {
                 </div>
               </div>
             </div>
+
+            {selectedAdminOrder.returnRequest && (
+              <div className="mb-6 p-4 bg-amber-50/70 border border-amber-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <span className="text-[10px] uppercase tracking-widest font-semibold text-amber-900 block mb-1">
+                    Buyer {selectedAdminOrder.returnRequest.type} Request · {selectedAdminOrder.returnRequest.status}
+                  </span>
+                  <p className="text-stone-700">{selectedAdminOrder.returnRequest.reason}</p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {selectedAdminOrder.returnRequest.status !== 'Approved' && selectedAdminOrder.returnRequest.status !== 'Completed' && (
+                    <button
+                      type="button"
+                      onClick={() => handleAdminReturnAction(selectedAdminOrder.id, 'Approved')}
+                      className="px-3 py-1.5 bg-stone-900 text-white text-[10px] uppercase tracking-wider hover:bg-black"
+                    >
+                      Approve
+                    </button>
+                  )}
+                  {selectedAdminOrder.returnRequest.status !== 'Completed' && (
+                    <button
+                      type="button"
+                      onClick={() => handleAdminReturnAction(selectedAdminOrder.id, 'Completed')}
+                      className="px-3 py-1.5 bg-emerald-800 text-white text-[10px] uppercase tracking-wider hover:bg-emerald-900"
+                    >
+                      Complete
+                    </button>
+                  )}
+                  {selectedAdminOrder.returnRequest.status !== 'Declined' && selectedAdminOrder.returnRequest.status !== 'Completed' && (
+                    <button
+                      type="button"
+                      onClick={() => handleAdminReturnAction(selectedAdminOrder.id, 'Declined')}
+                      className="px-3 py-1.5 border border-stone-300 bg-white text-stone-700 text-[10px] uppercase tracking-wider hover:text-red-700"
+                    >
+                      Decline
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Modal Actions */}
             <div className="flex flex-wrap items-center justify-between gap-4 pt-6 border-t border-stone-200">
@@ -1426,6 +1557,148 @@ export default function AdminPanel() {
               </div>
             </div>
 
+            {/* Action Required Queue */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <button
+                type="button"
+                onClick={() => { setActiveTab('users'); setUserFilter('pending'); }}
+                className="text-left bg-white border border-stone-200 hover:border-stone-900 p-5 transition-colors group"
+              >
+                <span className="text-[9px] uppercase tracking-widest text-stone-400 font-semibold block mb-1">
+                  Pending Sellers
+                </span>
+                <div className="flex items-baseline justify-between">
+                  <span className="font-serif text-2xl text-stone-900">{adminInsights.actionQueue?.pendingSellers || 0}</span>
+                  <span className="text-[10px] uppercase tracking-wider text-stone-400 group-hover:text-stone-900">Review →</span>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('support')}
+                className="text-left bg-white border border-stone-200 hover:border-stone-900 p-5 transition-colors group"
+              >
+                <span className="text-[9px] uppercase tracking-widest text-stone-400 font-semibold block mb-1">
+                  Open Tickets
+                </span>
+                <div className="flex items-baseline justify-between">
+                  <span className="font-serif text-2xl text-stone-900">{adminInsights.actionQueue?.openTickets || 0}</span>
+                  <span className="text-[10px] uppercase tracking-wider text-stone-400 group-hover:text-stone-900">Resolve →</span>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setActiveTab('catalog'); setCatalogStockFilter('out'); setCatalogPage(1); }}
+                className="text-left bg-white border border-stone-200 hover:border-stone-900 p-5 transition-colors group"
+              >
+                <span className="text-[9px] uppercase tracking-widest text-stone-400 font-semibold block mb-1">
+                  Out-of-Stock Items
+                </span>
+                <div className="flex items-baseline justify-between">
+                  <span className="font-serif text-2xl text-stone-900">{adminInsights.actionQueue?.outOfStockProducts || 0}</span>
+                  <span className="text-[10px] uppercase tracking-wider text-stone-400 group-hover:text-stone-900">Inspect →</span>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setActiveTab('orders'); setOrderStatusFilter('return'); }}
+                className="text-left bg-white border border-stone-200 hover:border-stone-900 p-5 transition-colors group"
+              >
+                <span className="text-[9px] uppercase tracking-widest text-stone-400 font-semibold block mb-1">
+                  Return Requests
+                </span>
+                <div className="flex items-baseline justify-between">
+                  <span className="font-serif text-2xl text-stone-900">{adminInsights.actionQueue?.pendingReturns || 0}</span>
+                  <span className="text-[10px] uppercase tracking-wider text-stone-400 group-hover:text-stone-900">Manage →</span>
+                </div>
+              </button>
+            </div>
+
+            {/* Revenue by Category, Order Status Breakdown & Top Stores */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Category Revenue */}
+              <div className="bg-white border border-stone-200 p-6 shadow-sm">
+                <span className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold block mb-4">
+                  Revenue by Category
+                </span>
+                {Object.keys(adminInsights.categoryRevenue || {}).length === 0 ? (
+                  <p className="text-xs text-stone-400 italic">No sales data yet.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {(() => {
+                      const entries = Object.entries(adminInsights.categoryRevenue).sort((a, b) => b[1] - a[1]);
+                      const maxVal = Math.max(1, ...entries.map((e) => e[1]));
+                      return entries.map(([cat, val]) => (
+                        <div key={cat} className="space-y-1">
+                          <div className="flex justify-between text-xs">
+                            <span className="text-stone-700 font-medium truncate">{cat}</span>
+                            <span className="font-mono text-stone-900">₹{Number(val).toLocaleString('en-IN')}</span>
+                          </div>
+                          <div className="h-1.5 bg-stone-100 overflow-hidden">
+                            <div className="h-full bg-stone-900" style={{ width: `${Math.round((val / maxVal) * 100)}%` }} />
+                          </div>
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                )}
+              </div>
+
+              {/* Order Status Distribution */}
+              <div className="bg-white border border-stone-200 p-6 shadow-sm">
+                <span className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold block mb-4">
+                  Order Status Distribution
+                </span>
+                {Object.keys(adminInsights.statusBreakdown || {}).length === 0 ? (
+                  <p className="text-xs text-stone-400 italic">No orders placed yet.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {Object.entries(adminInsights.statusBreakdown).map(([st, count]) => {
+                      const pct = metrics.totalOrders > 0 ? Math.round((count / metrics.totalOrders) * 100) : 0;
+                      return (
+                        <div key={st} className="space-y-1">
+                          <div className="flex justify-between text-xs">
+                            <span className="text-stone-700 font-medium">{st}</span>
+                            <span className="font-mono text-stone-500">{count} ({pct}%)</span>
+                          </div>
+                          <div className="h-1.5 bg-stone-100 overflow-hidden">
+                            <div className="h-full bg-stone-700" style={{ width: `${pct}%` }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Top Performing Stores */}
+              <div className="bg-white border border-stone-200 p-6 shadow-sm">
+                <span className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold block mb-4">
+                  Top Campus Stores
+                </span>
+                {(adminInsights.topStores || []).length === 0 ? (
+                  <p className="text-xs text-stone-400 italic">No store revenue recorded yet.</p>
+                ) : (
+                  <div className="divide-y divide-stone-100">
+                    {adminInsights.topStores.map((st, idx) => (
+                      <div key={st.id} className="py-2.5 flex items-center justify-between gap-2 text-xs">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span className="font-mono text-stone-400 text-[10px]">0{idx + 1}</span>
+                          <div className="min-w-0">
+                            <p className="font-serif text-stone-900 text-sm truncate">{st.storeName}</p>
+                            <span className="text-[10px] text-stone-400">{st.orders} orders · {st.units} units</span>
+                          </div>
+                        </div>
+                        <span className="font-mono font-medium text-stone-900 shrink-0">{st.formattedRevenue}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Platform Quick Summary */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="bg-white border border-stone-200 p-8 shadow-sm">
@@ -1502,17 +1775,43 @@ export default function AdminPanel() {
         {/* TAB 2: ORDERS OVERSIGHT */}
         {activeTab === 'orders' && (
           <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white border border-stone-200 p-4">
-              <input
-                type="text"
-                placeholder="Search orders by Order ID or Student Name..."
-                value={orderSearch}
-                onChange={(e) => setOrderSearch(e.target.value)}
-                className="w-full sm:w-96 bg-[#FAF9F6] border border-stone-200 px-4 py-2 text-xs text-stone-900 focus:outline-none focus:border-stone-900"
-              />
-              <span className="text-xs text-stone-400">
-                Showing {filteredOrders.length} of {orders.length} orders
-              </span>
+            <div className="flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-4 bg-white border border-stone-200 p-4">
+              <div className="flex flex-col sm:flex-row gap-3 flex-1">
+                <input
+                  type="text"
+                  placeholder="Search by Order ID, Student Name, or Hostel..."
+                  value={orderSearch}
+                  onChange={(e) => setOrderSearch(e.target.value)}
+                  className="w-full sm:w-80 bg-[#FAF9F6] border border-stone-200 px-4 py-2 text-xs text-stone-900 focus:outline-none focus:border-stone-900"
+                />
+                <select
+                  value={orderStatusFilter}
+                  onChange={(e) => setOrderStatusFilter(e.target.value)}
+                  className="bg-[#FAF9F6] border border-stone-200 px-3 py-2 text-xs text-stone-900 focus:outline-none focus:border-stone-900"
+                >
+                  <option value="all">All Statuses</option>
+                  <option value="Confirmed">Confirmed</option>
+                  <option value="Preparing">Preparing</option>
+                  <option value="Processing">Processing</option>
+                  <option value="Out for Delivery">Out for Delivery</option>
+                  <option value="Delivered">Delivered</option>
+                  <option value="Cancelled">Cancelled</option>
+                  <option value="return">Return / Replacement Requested</option>
+                </select>
+              </div>
+              <div className="flex items-center justify-between lg:justify-end gap-4">
+                <span className="text-xs text-stone-400">
+                  Showing {filteredOrders.length} of {orders.length} orders
+                </span>
+                <button
+                  type="button"
+                  onClick={handleExportOrdersCsv}
+                  disabled={filteredOrders.length === 0}
+                  className="px-4 py-2 border border-stone-300 bg-[#FAF9F6] hover:bg-stone-900 hover:text-white hover:border-stone-900 text-stone-800 text-[10px] uppercase tracking-widest font-medium transition-colors disabled:opacity-40"
+                >
+                  Export CSV
+                </button>
+              </div>
             </div>
 
             {filteredOrders.length === 0 ? (
@@ -1560,17 +1859,25 @@ export default function AdminPanel() {
                         </td>
                         <td className="p-4 font-serif text-stone-900 font-medium whitespace-nowrap">{order.total}</td>
                         <td className="p-4">
-                          <select
-                            value={order.status || 'Confirmed'}
-                            onChange={(e) => handleOrderStatusUpdate(order.id, e.target.value)}
-                            className="bg-[#FAF9F6] border border-stone-200 text-xs px-2.5 py-1 text-stone-900 focus:outline-none focus:border-stone-900"
-                          >
-                            <option value="Confirmed">Confirmed</option>
-                            <option value="Processing">Processing</option>
-                            <option value="Out for Delivery">Out for Delivery</option>
-                            <option value="Delivered">Delivered</option>
-                            <option value="Cancelled">Cancelled</option>
-                          </select>
+                          <div className="flex flex-col gap-1.5">
+                            <select
+                              value={order.status || 'Confirmed'}
+                              onChange={(e) => handleOrderStatusUpdate(order.id, e.target.value)}
+                              className="bg-[#FAF9F6] border border-stone-200 text-xs px-2.5 py-1 text-stone-900 focus:outline-none focus:border-stone-900"
+                            >
+                              <option value="Confirmed">Confirmed</option>
+                              <option value="Preparing">Preparing</option>
+                              <option value="Processing">Processing</option>
+                              <option value="Out for Delivery">Out for Delivery</option>
+                              <option value="Delivered">Delivered</option>
+                              <option value="Cancelled">Cancelled</option>
+                            </select>
+                            {order.returnRequest && (
+                              <span className="text-[9px] uppercase tracking-wider font-semibold px-1.5 py-0.5 bg-amber-50 border border-amber-200 text-amber-900 w-fit">
+                                {order.returnRequest.type}: {order.returnRequest.status}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="p-4 text-right">
                           <button
@@ -1596,17 +1903,42 @@ export default function AdminPanel() {
           <div className="space-y-6">
             {/* Catalog Toolbar: Search, Page Size, View Switcher & Add Action */}
             <div className="bg-white border border-stone-200 p-4 flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-4 shadow-sm">
-              <div className="flex-1 max-w-md">
+              <div className="flex flex-col sm:flex-row gap-3 flex-1">
                 <input
                   type="text"
-                  placeholder="Search products by title or category..."
+                  placeholder="Search by title, ID, category, or seller..."
                   value={productSearch}
                   onChange={(e) => {
                     setProductSearch(e.target.value);
                     setCatalogPage(1);
                   }}
-                  className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-2 text-xs text-stone-900 focus:outline-none focus:border-stone-900"
+                  className="flex-1 min-w-[200px] bg-[#FAF9F6] border border-stone-200 px-4 py-2 text-xs text-stone-900 focus:outline-none focus:border-stone-900"
                 />
+                <select
+                  value={catalogCategoryFilter}
+                  onChange={(e) => {
+                    setCatalogCategoryFilter(e.target.value);
+                    setCatalogPage(1);
+                  }}
+                  className="bg-[#FAF9F6] border border-stone-200 px-3 py-2 text-xs text-stone-900 focus:outline-none focus:border-stone-900"
+                >
+                  <option value="all">All Categories</option>
+                  {categories.map((c) => (
+                    <option key={c.id || c.name} value={c.name}>{c.name}</option>
+                  ))}
+                </select>
+                <select
+                  value={catalogStockFilter}
+                  onChange={(e) => {
+                    setCatalogStockFilter(e.target.value);
+                    setCatalogPage(1);
+                  }}
+                  className="bg-[#FAF9F6] border border-stone-200 px-3 py-2 text-xs text-stone-900 focus:outline-none focus:border-stone-900"
+                >
+                  <option value="all">All Stock Levels</option>
+                  <option value="low">Low Stock (1–5)</option>
+                  <option value="out">Out of Stock (0)</option>
+                </select>
               </div>
 
               <div className="flex flex-wrap items-center justify-between lg:justify-end gap-3 sm:gap-4">
@@ -2068,14 +2400,22 @@ export default function AdminPanel() {
             if (userFilter === 'approved') return st === 'approved' || u.isSeller;
             if (userFilter === 'suspended') return st === 'suspended' || st === 'rejected';
             if (userFilter === 'buyers') return st === 'none' && !u.isSeller;
-            return true;
+
+            const q = userSearch.toLowerCase().trim();
+            if (!q) return true;
+            const details = u.sellerProfile || u.sellerDetails || {};
+            return (
+              (u.name && u.name.toLowerCase().includes(q)) ||
+              (u.email && u.email.toLowerCase().includes(q)) ||
+              (details.storeName && details.storeName.toLowerCase().includes(q))
+            );
           });
 
           return (
             <div className="space-y-6">
               
-              {/* Filter Tabs & Summary Bar */}
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white border border-stone-200 p-4 shadow-sm">
+              {/* Filter Tabs & Search Bar */}
+              <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 bg-white border border-stone-200 p-4 shadow-sm">
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
@@ -2145,8 +2485,17 @@ export default function AdminPanel() {
                   </button>
                 </div>
 
-                <div className="text-xs text-stone-500">
-                  Showing <span className="font-semibold text-stone-900">{filteredUsers.length}</span> accounts
+                <div className="flex items-center gap-3">
+                  <input
+                    type="text"
+                    placeholder="Search name, email, or store..."
+                    value={userSearch}
+                    onChange={(e) => setUserSearch(e.target.value)}
+                    className="bg-[#FAF9F6] border border-stone-200 px-3 py-1.5 text-xs text-stone-900 focus:outline-none focus:border-stone-900 w-56"
+                  />
+                  <div className="text-xs text-stone-500 whitespace-nowrap">
+                    <span className="font-semibold text-stone-900">{filteredUsers.length}</span> accounts
+                  </div>
                 </div>
               </div>
 
@@ -2244,9 +2593,21 @@ export default function AdminPanel() {
                             {/* Admin Role */}
                             <td className="p-4">
                               {u.isAdmin ? (
-                                <span className="inline-block text-[10px] uppercase tracking-wider bg-stone-900 text-white px-2 py-0.5 font-medium">
-                                  Admin Granted
-                                </span>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="inline-block text-[10px] uppercase tracking-wider bg-stone-900 text-white px-2 py-0.5 font-medium">
+                                    Admin
+                                  </span>
+                                  {adminUser?.id !== u.id && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleToggleAdmin(u.id)}
+                                      className="text-[10px] uppercase tracking-wider text-stone-400 hover:text-red-700 underline"
+                                      title="Revoke admin privileges"
+                                    >
+                                      Revoke
+                                    </button>
+                                  )}
+                                </div>
                               ) : (
                                 <button
                                   type="button"

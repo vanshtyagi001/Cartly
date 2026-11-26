@@ -16,6 +16,7 @@ from accounts.repository import get_users_collection
 from orders.repository import get_orders_collection
 from orders.serializers import format_order
 from products.repository import (
+    create_notification,
     get_categories_collection,
     get_collection as get_products_collection,
     get_coupons_collection,
@@ -138,6 +139,48 @@ class AdminMetricsView(APIView):
             cat = p.get("category", "Uncategorized")
             category_counts[cat] = category_counts.get(cat, 0) + 1
 
+        # Category revenue & top stores from non-cancelled orders
+        seller_map = {}
+        for u in all_users:
+            if u.get("isSeller") or (u.get("sellerStatus") or "").lower() == "approved":
+                prof = u.get("sellerProfile") or u.get("sellerDetails") or {}
+                seller_map[str(u["_id"])] = prof.get("storeName") or u.get("name") or "Campus Store"
+
+        category_revenue = {}
+        store_stats = {}
+        pending_returns = 0
+        for o in all_orders:
+            rr = o.get("returnRequest")
+            if rr and rr.get("status") in ("Requested", "Approved"):
+                pending_returns += 1
+            if o.get("status") == "Cancelled":
+                continue
+            seen_stores_in_order = set()
+            for item in o.get("items", []):
+                cat = item.get("category", "Essentials")
+                qty = int(item.get("quantity", 1) or 1)
+                rev = float(item.get("rawPrice", 0) or 0) * qty
+                category_revenue[cat] = round(category_revenue.get(cat, 0.0) + rev, 2)
+
+                sid = item.get("sellerId")
+                sname = seller_map.get(sid, "Cartly Official Hub") if sid else "Cartly Official Hub"
+                store_key = sid or "official"
+                if store_key not in store_stats:
+                    store_stats[store_key] = {"id": store_key, "storeName": sname, "revenue": 0.0, "orders": 0, "units": 0}
+                store_stats[store_key]["revenue"] += rev
+                store_stats[store_key]["units"] += qty
+                if store_key not in seen_stores_in_order:
+                    store_stats[store_key]["orders"] += 1
+                    seen_stores_in_order.add(store_key)
+
+        top_stores = sorted(store_stats.values(), key=lambda x: x["revenue"], reverse=True)[:4]
+        for ts in top_stores:
+            ts["formattedRevenue"] = f"₹{ts['revenue']:,.2f}"
+
+        pending_sellers = len([u for u in all_users if (u.get("sellerStatus") or "").lower() == "pending"])
+        out_of_stock_products = len([p for p in all_products if int(p.get("stock", 25) if p.get("stock") is not None else 25) <= 0])
+        open_tickets = get_support_tickets_collection().count_documents({"status": "Open"})
+
         return Response(
             {
                 "metrics": {
@@ -150,6 +193,14 @@ class AdminMetricsView(APIView):
                 },
                 "statusBreakdown": status_counts,
                 "categoryBreakdown": category_counts,
+                "categoryRevenue": category_revenue,
+                "topStores": top_stores,
+                "actionQueue": {
+                    "pendingSellers": pending_sellers,
+                    "openTickets": open_tickets,
+                    "outOfStockProducts": out_of_stock_products,
+                    "pendingReturns": pending_returns,
+                },
             },
             status=status.HTTP_200_OK,
         )
@@ -352,6 +403,9 @@ class AdminUsersView(APIView):
 
         if not target:
             return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if str(target["_id"]) == str(res["_id"]):
+            return Response({"error": "You cannot revoke your own admin privileges."}, status=status.HTTP_400_BAD_REQUEST)
 
         new_status = not target.get("isAdmin", False)
         users_col.update_one({"_id": ObjectId(user_id)}, {"$set": {"isAdmin": new_status}})
@@ -774,5 +828,50 @@ class AdminCouponsView(APIView):
         if result.deleted_count == 0:
             return Response({"error": "Coupon not found."}, status=status.HTTP_404_NOT_FOUND)
         return Response({"message": "Promo code deleted."}, status=status.HTTP_200_OK)
+
+
+class AdminOrderReturnView(APIView):
+    """
+    Admin endpoint to approve, complete, or decline a buyer return/replacement request.
+    PATCH /api/admin/orders/<str:order_id>/return
+    """
+    def patch(self, request, order_id):
+        is_ok, res = check_is_admin(request)
+        if not is_ok:
+            return res
+
+        new_status = str((request.data or {}).get("status", "")).strip()
+        if new_status not in ("Approved", "Completed", "Declined"):
+            return Response({"error": "Status must be 'Approved', 'Completed', or 'Declined'."}, status=status.HTTP_400_BAD_REQUEST)
+
+        orders_col = get_orders_collection()
+        order_doc = orders_col.find_one({"$or": [{"orderId": order_id}, {"_id": order_id}]})
+        if not order_doc or not order_doc.get("returnRequest"):
+            return Response({"error": "Return request not found on this order."}, status=status.HTTP_404_NOT_FOUND)
+
+        now = datetime.now(timezone.utc)
+        orders_col.update_one(
+            {"_id": order_doc["_id"]},
+            {
+                "$set": {
+                    "returnRequest.status": new_status,
+                    "returnRequest.reviewedByAdmin": True,
+                    "returnRequest.updatedAt": now.isoformat(),
+                    "updatedAt": now,
+                }
+            },
+        )
+
+        if order_doc.get("userId") or order_doc.get("userEmail"):
+            req_type = order_doc["returnRequest"].get("type", "Return")
+            create_notification(
+                user_id=order_doc.get("userId"),
+                email=order_doc.get("userEmail"),
+                title=f"{req_type} {new_status} (#{order_doc.get('orderId', order_id)})",
+                message=f"Admin marked your {req_type.lower()} request as {new_status}.",
+                link="/orders",
+            )
+
+        return Response({"message": f"Return request on Order #{order_id} marked as '{new_status}'."}, status=status.HTTP_200_OK)
 
 

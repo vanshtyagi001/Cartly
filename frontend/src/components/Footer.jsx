@@ -6,25 +6,8 @@ export default function Footer() {
   const [newsletterEmail, setNewsletterEmail] = useState('');
   const [newsletterMessage, setNewsletterMessage] = useState('');
   const [isSubscribing, setIsSubscribing] = useState(false);
-  const [categories, setCategories] = useState([
-    'Hostel Essentials',
-    'Electronics',
-    'Stationery',
-    'Trekking Essentials',
-  ]);
   const lastScrollY = useRef(0);
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-
-  useEffect(() => {
-    fetch(`${API_URL}/api/categories`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data?.categories && Array.isArray(data.categories) && data.categories.length > 0) {
-          setCategories(data.categories);
-        }
-      })
-      .catch(() => {});
-  }, [API_URL]);
 
   const handleNewsletterSubmit = async (e) => {
     e.preventDefault();
@@ -95,7 +78,7 @@ export default function Footer() {
         </div>
         {/* Stationery */}
         <div className="bg-stone-900 overflow-hidden relative">
-          <img src="https://images.unsplash.com/photo-1512820790803-83ca734da794?q=80&w=600&auto=format&fit=crop" alt="Stationery" className="w-full h-full object-cover opacity-60 mix-blend-luminosity" />
+          <img src="https://www.study-horizon.com/static/images/blog/features/essay-exams.webp?q=80&w=600&auto=format&fit=crop" alt="Stationery" className="w-full h-full object-cover opacity-60 mix-blend-luminosity" />
           <span className="absolute bottom-4 left-4 text-[10px] uppercase tracking-widest text-white font-medium">Stationery</span>
         </div>
         {/* Electronics */}
@@ -152,30 +135,14 @@ export default function Footer() {
           <div className="flex flex-col gap-3">
             <h4 className="text-[9px] uppercase tracking-[0.25em] text-stone-600 font-semibold mb-2">Shop</h4>
             <Link to="/shop" className="text-sm font-sans tracking-wide text-stone-300 hover:text-white transition-colors duration-300">All Products</Link>
-            {categories.slice(0, Math.ceil(categories.length / 2)).map((cat) => (
-              <Link
-                key={cat}
-                to={`/shop?category=${encodeURIComponent(cat)}`}
-                className="text-sm font-sans tracking-wide text-stone-300 hover:text-white transition-colors duration-300"
-              >
-                {cat}
-              </Link>
-            ))}
-            <Link to="/wishlist" className="text-sm font-sans tracking-wide text-stone-300 hover:text-white transition-colors duration-300">Saved Wishlist</Link>
-            <Link to="/orders" className="text-sm font-sans tracking-wide text-stone-300 hover:text-white transition-colors duration-300">Your Orders</Link>
+            <Link to="/shop?category=Hostel%20Essentials" className="text-sm font-sans tracking-wide text-stone-300 hover:text-white transition-colors duration-300">Hostel Essentials</Link>
+            <Link to="/shop?category=Electronics" className="text-sm font-sans tracking-wide text-stone-300 hover:text-white transition-colors duration-300">Electronics</Link>
           </div>
           
           <div className="flex flex-col gap-3">
             <h4 className="text-[9px] uppercase tracking-[0.25em] text-stone-600 font-semibold mb-2">Explore</h4>
-            {categories.slice(Math.ceil(categories.length / 2)).map((cat) => (
-              <Link
-                key={cat}
-                to={`/shop?category=${encodeURIComponent(cat)}`}
-                className="text-sm font-sans tracking-wide text-stone-300 hover:text-white transition-colors duration-300"
-              >
-                {cat}
-              </Link>
-            ))}
+            <Link to="/shop?category=Stationery" className="text-sm font-sans tracking-wide text-stone-300 hover:text-white transition-colors duration-300">Stationery</Link>
+            <Link to="/shop?category=Trekking%20Essentials" className="text-sm font-sans tracking-wide text-stone-300 hover:text-white transition-colors duration-300">Trekking Essentials</Link>
             <Link to="/seller" className="text-sm font-sans tracking-wide text-amber-200/90 hover:text-white transition-colors duration-300">Sell on Cartly</Link>
             <Link to="/about" className="text-sm font-sans tracking-wide text-stone-300 hover:text-white transition-colors duration-300">About Cartly</Link>
           </div>
