@@ -12,6 +12,19 @@ export default function Shop() {
     "All Products", "Hostel Essentials", "Electronics", "Stationery", "Trekking Essentials"
   ]);
   const [isLoading, setIsLoading] = useState(true);
+  const [recentlyViewed, setRecentlyViewed] = useState(() => {
+    try {
+      const saved = localStorage.getItem('cartly_recently_viewed');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const handleClearRecentlyViewed = () => {
+    localStorage.removeItem('cartly_recently_viewed');
+    setRecentlyViewed([]);
+  };
 
   // Fetch products and categories from backend on component mount
   useEffect(() => {
@@ -37,6 +50,15 @@ export default function Shop() {
   const activeCategory = searchParams.get("category") || "All Products";
   const activeSort = searchParams.get("sort") || "name-asc";
   const searchQuery = searchParams.get("search") || "";
+  const activePriceRange = searchParams.get("price") || "all";
+  const inStockOnly = searchParams.get("inStock") === "1";
+
+  const priceRanges = [
+    { id: "all", label: "All Prices" },
+    { id: "under-500", label: "Under ₹500" },
+    { id: "500-1500", label: "₹500 – ₹1,500" },
+    { id: "1500-plus", label: "₹1,500 & Above" },
+  ];
 
   const sortOptions = [
     { id: 'name-asc', label: 'Name: A to Z' },
@@ -45,10 +67,24 @@ export default function Shop() {
     { id: 'price-desc', label: 'Price: High to Low' }
   ];
 
-  // 1. Filter by Category & Search Query
+  // 1. Filter by Category, Availability, Price Range & Search Query
   let displayedProducts = products.filter(product => {
     const matchesCategory = activeCategory === "All Products" || product.category === activeCategory;
     if (!matchesCategory) return false;
+
+    if (inStockOnly) {
+      const stockCount = product.stock !== undefined ? product.stock : 25;
+      if (stockCount <= 0 || product.inStock === false) return false;
+    }
+
+    if (activePriceRange !== "all") {
+      const numPrice = typeof product.rawPrice === 'number'
+        ? product.rawPrice
+        : parseFloat(String(product.price).replace(/[^0-9.-]+/g, '')) || 0;
+      if (activePriceRange === "under-500" && numPrice >= 500) return false;
+      if (activePriceRange === "500-1500" && (numPrice < 500 || numPrice > 1500)) return false;
+      if (activePriceRange === "1500-plus" && numPrice <= 1500) return false;
+    }
 
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase().trim();
@@ -116,6 +152,36 @@ export default function Shop() {
     setSearchParams(newParams, { replace: true });
   };
 
+  const handlePriceRangeClick = (rangeId) => {
+    const newParams = new URLSearchParams(searchParams);
+    if (rangeId === "all") {
+      newParams.delete("price");
+    } else {
+      newParams.set("price", rangeId);
+    }
+    setSearchParams(newParams, { replace: true });
+  };
+
+  const handleToggleInStock = () => {
+    const newParams = new URLSearchParams(searchParams);
+    if (inStockOnly) {
+      newParams.delete("inStock");
+    } else {
+      newParams.set("inStock", "1");
+    }
+    setSearchParams(newParams, { replace: true });
+  };
+
+  const handleResetAllFilters = () => {
+    setSearchParams({}, { replace: true });
+  };
+
+  const hasActiveFilters =
+    activeCategory !== "All Products" ||
+    activePriceRange !== "all" ||
+    inStockOnly ||
+    Boolean(searchQuery.trim());
+
   // Close the sort dropdown if the user clicks outside of it
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -156,6 +222,80 @@ export default function Shop() {
                 </li>
               ))}
             </ul>
+
+            {/* Price Range Filter */}
+            <div className="border-t border-stone-200 pt-8 mt-8">
+              <h3 className="text-[9px] font-semibold text-stone-400 uppercase tracking-[0.2em] mb-5">
+                Price Range
+              </h3>
+              <ul className="flex flex-col space-y-3.5">
+                {priceRanges.map((range) => (
+                  <li key={range.id}>
+                    <button
+                      type="button"
+                      onClick={() => handlePriceRangeClick(range.id)}
+                      className={`text-left text-[11px] uppercase tracking-[0.12em] transition-colors flex items-center gap-2.5 ${
+                        activePriceRange === range.id
+                          ? 'text-stone-900 font-semibold'
+                          : 'text-stone-400 hover:text-stone-900'
+                      }`}
+                    >
+                      <span
+                        className={`w-2.5 h-2.5 border flex items-center justify-center shrink-0 ${
+                          activePriceRange === range.id ? 'border-stone-900' : 'border-stone-300'
+                        }`}
+                      >
+                        {activePriceRange === range.id && <span className="w-1.5 h-1.5 bg-stone-900" />}
+                      </span>
+                      <span>{range.label}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Availability Toggle */}
+            <div className="border-t border-stone-200 pt-8 mt-8">
+              <h3 className="text-[9px] font-semibold text-stone-400 uppercase tracking-[0.2em] mb-4">
+                Availability
+              </h3>
+              <label className="flex items-center gap-3 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  checked={inStockOnly}
+                  onChange={handleToggleInStock}
+                  className="sr-only"
+                />
+                <span
+                  className={`w-4 h-4 border flex items-center justify-center transition-colors shrink-0 ${
+                    inStockOnly
+                      ? 'bg-stone-900 border-stone-900 text-white'
+                      : 'bg-white border-stone-300 group-hover:border-stone-600'
+                  }`}
+                >
+                  {inStockOnly && (
+                    <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </span>
+                <span className="text-[11px] uppercase tracking-[0.12em] text-stone-600 group-hover:text-stone-900">
+                  In Stock Only
+                </span>
+              </label>
+            </div>
+
+            {hasActiveFilters && (
+              <div className="pt-6 mt-6 border-t border-stone-200">
+                <button
+                  type="button"
+                  onClick={handleResetAllFilters}
+                  className="text-[10px] uppercase tracking-widest text-stone-500 hover:text-stone-900 underline transition-colors"
+                >
+                  Reset All Filters
+                </button>
+              </div>
+            )}
           </div>
         </aside>
 
@@ -297,6 +437,54 @@ export default function Shop() {
                   )}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Recently Viewed Strip */}
+          {recentlyViewed.length > 0 && (
+            <div className="mt-20 pt-12 border-t border-stone-200">
+              <div className="flex items-end justify-between mb-8">
+                <div>
+                  <span className="text-[9px] uppercase tracking-[0.25em] text-stone-400 font-semibold block mb-1">
+                    Browsing History
+                  </span>
+                  <h3 className="text-2xl font-serif text-stone-900 tracking-tight">
+                    Recently Viewed
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleClearRecentlyViewed}
+                  className="text-[10px] uppercase tracking-widest text-stone-400 hover:text-stone-900 underline transition-colors"
+                >
+                  Clear History
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                {recentlyViewed.map((item) => (
+                  <Link
+                    key={item.id}
+                    to={`/product/${item.id}`}
+                    className="group block bg-[#FAF9F6] border border-stone-200 p-3.5 hover:border-stone-400 transition-colors"
+                  >
+                    <div className="aspect-square bg-white border border-stone-100 overflow-hidden mb-3">
+                      <img
+                        src={item.img}
+                        alt={item.name}
+                        className="w-full h-full object-cover mix-blend-multiply group-hover:scale-105 transition-transform duration-700"
+                      />
+                    </div>
+                    <span className="text-[9px] uppercase tracking-widest text-stone-400 block mb-1">
+                      {item.category}
+                    </span>
+                    <h4 className="font-serif text-sm text-stone-900 group-hover:underline truncate">
+                      {item.name}
+                    </h4>
+                    <span className="text-xs text-stone-500 mt-0.5 block">{item.price}</span>
+                  </Link>
+                ))}
+              </div>
             </div>
           )}
         </section>

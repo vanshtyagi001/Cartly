@@ -53,6 +53,9 @@ export default function AdminPanel() {
   const [editingSellerStore, setEditingSellerStore] = useState(null);
   const [isSavingSellerStore, setIsSavingSellerStore] = useState(false);
   const [supportData, setSupportData] = useState({ tickets: [], subscribers: [], stockAlerts: [] });
+  const [coupons, setCoupons] = useState([]);
+  const [newCoupon, setNewCoupon] = useState({ code: '', discountType: 'percent', discountValue: '', minOrder: '' });
+  const [isSavingCoupon, setIsSavingCoupon] = useState(false);
   const [catalogViewMode, setCatalogViewMode] = useState('tiles'); // 'tiles' | 'table'
   const [catalogPage, setCatalogPage] = useState(1);
   const [catalogPageSize, setCatalogPageSize] = useState(8);
@@ -152,6 +155,13 @@ export default function AdminPanel() {
           subscribers: sData.subscribers || [],
           stockAlerts: sData.stockAlerts || [],
         });
+      }
+
+      // 7. Promo Coupons
+      const cpRes = await fetch(`${API_URL}/api/admin/coupons`, { headers });
+      if (cpRes.ok) {
+        const cpData = await cpRes.json();
+        setCoupons(cpData.coupons || []);
       }
     } catch (err) {
       console.error('Error fetching admin data:', err);
@@ -509,6 +519,67 @@ export default function AdminPanel() {
       fetchAdminData();
     } catch (err) {
       showNotice(err.message || 'Error updating support ticket.');
+    }
+  };
+
+  const handleCreateCoupon = async (e) => {
+    e.preventDefault();
+    if (!newCoupon.code.trim() || !newCoupon.discountValue) return;
+    setIsSavingCoupon(true);
+    try {
+      const res = await fetch(`${API_URL}/api/admin/coupons`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          code: newCoupon.code.trim().toUpperCase(),
+          discountType: newCoupon.discountType,
+          discountValue: parseFloat(newCoupon.discountValue),
+          minOrder: parseFloat(newCoupon.minOrder || 0),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to create promo code.');
+      showNotice(data.message || 'Promo code created.');
+      setNewCoupon({ code: '', discountType: 'percent', discountValue: '', minOrder: '' });
+      fetchAdminData();
+    } catch (err) {
+      showNotice(err.message || 'Error creating promo code.');
+    } finally {
+      setIsSavingCoupon(false);
+    }
+  };
+
+  const handleToggleCoupon = async (couponId, isActive) => {
+    try {
+      const res = await fetch(`${API_URL}/api/admin/coupons/${couponId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ isActive }),
+      });
+      if (res.ok) fetchAdminData();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleDeleteCoupon = async (couponId) => {
+    try {
+      const res = await fetch(`${API_URL}/api/admin/coupons/${couponId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      if (res.ok) {
+        showNotice('Promo code deleted.');
+        fetchAdminData();
+      }
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -2330,6 +2401,111 @@ export default function AdminPanel() {
                   {supportData.subscribers.length}
                 </span>
               </div>
+            </div>
+
+            {/* Campus Promo Codes Manager */}
+            <div className="bg-white border border-stone-200 shadow-sm p-6 sm:p-8 space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 pb-4 border-b border-stone-200">
+                <div>
+                  <span className="text-[10px] uppercase tracking-[0.25em] text-stone-400 font-semibold block mb-1">
+                    Checkout Discounts
+                  </span>
+                  <h2 className="font-serif text-xl text-stone-900">Campus Promo &amp; Coupon Codes</h2>
+                </div>
+              </div>
+
+              <form onSubmit={handleCreateCoupon} className="grid grid-cols-1 sm:grid-cols-5 gap-3 items-end">
+                <div>
+                  <label className="block text-[9px] uppercase tracking-widest text-stone-500 mb-1">Code *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newCoupon.code}
+                    onChange={(e) => setNewCoupon((p) => ({ ...p, code: e.target.value.toUpperCase() }))}
+                    placeholder="FRESHERS10"
+                    className="w-full bg-[#FAF9F6] border border-stone-200 px-3 py-2 text-xs uppercase font-mono focus:border-stone-900 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[9px] uppercase tracking-widest text-stone-500 mb-1">Type</label>
+                  <select
+                    value={newCoupon.discountType}
+                    onChange={(e) => setNewCoupon((p) => ({ ...p, discountType: e.target.value }))}
+                    className="w-full bg-[#FAF9F6] border border-stone-200 px-3 py-2 text-xs focus:border-stone-900 focus:outline-none"
+                  >
+                    <option value="percent">Percent (%)</option>
+                    <option value="flat">Flat (₹)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[9px] uppercase tracking-widest text-stone-500 mb-1">Value *</label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    value={newCoupon.discountValue}
+                    onChange={(e) => setNewCoupon((p) => ({ ...p, discountValue: e.target.value }))}
+                    placeholder="10"
+                    className="w-full bg-[#FAF9F6] border border-stone-200 px-3 py-2 text-xs focus:border-stone-900 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[9px] uppercase tracking-widest text-stone-500 mb-1">Min Order (₹)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={newCoupon.minOrder}
+                    onChange={(e) => setNewCoupon((p) => ({ ...p, minOrder: e.target.value }))}
+                    placeholder="0"
+                    className="w-full bg-[#FAF9F6] border border-stone-200 px-3 py-2 text-xs focus:border-stone-900 focus:outline-none"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={isSavingCoupon}
+                  className="bg-stone-900 text-white text-[10px] uppercase tracking-widest font-medium py-2.5 px-4 hover:bg-black transition-colors disabled:opacity-50"
+                >
+                  {isSavingCoupon ? 'Saving...' : '+ Add Code'}
+                </button>
+              </form>
+
+              {coupons.length > 0 && (
+                <div className="divide-y divide-stone-100 border-t border-stone-200">
+                  {coupons.map((cp) => (
+                    <div key={cp.id} className="py-3 flex flex-wrap items-center justify-between gap-4 text-xs">
+                      <div className="flex items-center gap-3">
+                        <span className="font-mono font-semibold text-stone-900 bg-[#FAF9F6] border border-stone-200 px-2.5 py-1">
+                          {cp.code}
+                        </span>
+                        <span className="text-stone-700">
+                          {cp.discountType === 'percent' ? `${cp.discountValue}% off` : `₹${cp.discountValue} off`}
+                          {cp.minOrder > 0 ? ` (Min ₹${cp.minOrder})` : ''}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleCoupon(cp.id, !cp.isActive)}
+                          className={`px-2.5 py-1 text-[10px] uppercase tracking-wider border ${
+                            cp.isActive
+                              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                              : 'bg-stone-100 text-stone-500 border-stone-200'
+                          }`}
+                        >
+                          {cp.isActive ? 'Active' : 'Paused'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteCoupon(cp.id)}
+                          className="text-[10px] uppercase tracking-wider text-red-600 hover:text-red-800"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Support Tickets Table */}

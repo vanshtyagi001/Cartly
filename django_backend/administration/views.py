@@ -18,6 +18,7 @@ from orders.serializers import format_order
 from products.repository import (
     get_categories_collection,
     get_collection as get_products_collection,
+    get_coupons_collection,
     get_newsletter_collection,
     get_stock_alerts_collection,
     get_support_tickets_collection,
@@ -652,5 +653,118 @@ class AdminSupportView(APIView):
             return Response({"error": "Support ticket not found."}, status=status.HTTP_404_NOT_FOUND)
 
         return Response({"message": f"Ticket marked as '{new_status}'."}, status=status.HTTP_200_OK)
+
+
+class AdminCouponsView(APIView):
+    """
+    Admin endpoint to list, create, toggle, and delete campus promo codes.
+    GET /api/admin/coupons
+    POST /api/admin/coupons -> { code, discountType: "percent"|"flat", discountValue, minOrder }
+    PATCH /api/admin/coupons/<coupon_id> -> { isActive: bool }
+    DELETE /api/admin/coupons/<coupon_id>
+    """
+    def get(self, request):
+        is_ok, res = check_is_admin(request)
+        if not is_ok:
+            return res
+
+        docs = list(get_coupons_collection().find().sort("createdAt", -1))
+        coupons = [
+            {
+                "id": str(d["_id"]),
+                "code": d.get("code", ""),
+                "discountType": d.get("discountType", "percent"),
+                "discountValue": float(d.get("discountValue", 0)),
+                "minOrder": float(d.get("minOrder", 0)),
+                "isActive": bool(d.get("isActive", True)),
+            }
+            for d in docs
+        ]
+        return Response({"coupons": coupons}, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        is_ok, res = check_is_admin(request)
+        if not is_ok:
+            return res
+
+        data = request.data or {}
+        code = str(data.get("code", "")).strip().upper().replace(" ", "")
+        discount_type = str(data.get("discountType", "percent")).strip().lower()
+        try:
+            discount_value = float(data.get("discountValue", 0))
+            min_order = max(0.0, float(data.get("minOrder", 0) or 0))
+        except (ValueError, TypeError):
+            return Response({"error": "Invalid discount or minimum order value."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not code:
+            return Response({"error": "Promo code is required."}, status=status.HTTP_400_BAD_REQUEST)
+        if discount_type not in ("percent", "flat"):
+            return Response({"error": "Discount type must be 'percent' or 'flat'."}, status=status.HTTP_400_BAD_REQUEST)
+        if discount_value <= 0 or (discount_type == "percent" and discount_value > 90):
+            return Response({"error": "Enter a valid discount value (1–90% or positive flat amount)."}, status=status.HTTP_400_BAD_REQUEST)
+
+        col = get_coupons_collection()
+        if col.find_one({"code": code}):
+            return Response({"error": f"Promo code '{code}' already exists."}, status=status.HTTP_400_BAD_REQUEST)
+
+        now = datetime.now(timezone.utc)
+        doc = {
+            "code": code,
+            "discountType": discount_type,
+            "discountValue": discount_value,
+            "minOrder": min_order,
+            "isActive": True,
+            "createdAt": now,
+            "updatedAt": now,
+        }
+        ins = col.insert_one(doc)
+        return Response(
+            {
+                "message": f"Promo code '{code}' created.",
+                "coupon": {
+                    "id": str(ins.inserted_id),
+                    "code": code,
+                    "discountType": discount_type,
+                    "discountValue": discount_value,
+                    "minOrder": min_order,
+                    "isActive": True,
+                },
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+    def patch(self, request, coupon_id):
+        is_ok, res = check_is_admin(request)
+        if not is_ok:
+            return res
+
+        try:
+            oid = ObjectId(coupon_id)
+        except Exception:
+            return Response({"error": "Invalid coupon ID."}, status=status.HTTP_400_BAD_REQUEST)
+
+        is_active = bool((request.data or {}).get("isActive", True))
+        result = get_coupons_collection().update_one(
+            {"_id": oid},
+            {"$set": {"isActive": is_active, "updatedAt": datetime.now(timezone.utc)}},
+        )
+        if result.matched_count == 0:
+            return Response({"error": "Coupon not found."}, status=status.HTTP_404_NOT_FOUND)
+        return Response({"message": f"Coupon {'activated' if is_active else 'paused'}."}, status=status.HTTP_200_OK)
+
+    def delete(self, request, coupon_id):
+        is_ok, res = check_is_admin(request)
+        if not is_ok:
+            return res
+
+        try:
+            oid = ObjectId(coupon_id)
+        except Exception:
+            return Response({"error": "Invalid coupon ID."}, status=status.HTTP_400_BAD_REQUEST)
+
+        result = get_coupons_collection().delete_one({"_id": oid})
+        if result.deleted_count == 0:
+            return Response({"error": "Coupon not found."}, status=status.HTTP_404_NOT_FOUND)
+        return Response({"message": "Promo code deleted."}, status=status.HTTP_200_OK)
 
 

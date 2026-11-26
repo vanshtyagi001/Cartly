@@ -41,3 +41,7 @@ def get_support_tickets_collection():
 
 def get_newsletter_collection():
     return _get_db()["newsletter_subscribers"]
+
+
+def get_coupons_collection():
+    return _get_db()["coupons"]

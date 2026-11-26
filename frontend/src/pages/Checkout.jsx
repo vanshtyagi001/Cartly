@@ -60,15 +60,48 @@ export default function Checkout() {
   const [submitError, setSubmitError] = useState('');
   const [placedOrder, setPlacedOrder] = useState(null);
 
+  // Campus Promo Code state
+  const [promoInput, setPromoInput] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const [promoError, setPromoError] = useState('');
+  const [isValidatingPromo, setIsValidatingPromo] = useState(false);
+
   // Safely calculate the checkout total
   const safeCartTotal = checkoutItems.reduce((total, item) => {
     const numericPrice = parseFloat(String(item.price).replace(/[^0-9.-]+/g, '')) || 0;
     return total + (numericPrice * item.quantity);
   }, 0);
 
+  const discountAmount = appliedCoupon ? Number(appliedCoupon.discountAmount || 0) : 0;
+  const discountedSubtotal = Math.max(0, safeCartTotal - discountAmount);
   const shipping = 0;
-  const tax = safeCartTotal * 0.08;
-  const grandTotal = safeCartTotal + shipping + tax;
+  const tax = discountedSubtotal * 0.08;
+  const grandTotal = discountedSubtotal + shipping + tax;
+
+  const handleApplyPromo = async () => {
+    const code = promoInput.trim().toUpperCase();
+    if (!code) return;
+    setPromoError('');
+    setIsValidatingPromo(true);
+    try {
+      const res = await fetch(`${API_URL}/api/orders/validate-coupon`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, subtotal: safeCartTotal }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.valid) {
+        throw new Error(data.error || 'Invalid promo code.');
+      }
+      setAppliedCoupon(data);
+      setPromoInput('');
+    } catch (err) {
+      setAppliedCoupon(null);
+      setPromoError(err.message || 'Could not apply promo code.');
+    } finally {
+      setIsValidatingPromo(false);
+    }
+  };
 
   const handleAddressChange = (e) => {
     const { name, value } = e.target;
@@ -148,6 +181,7 @@ export default function Checkout() {
           email: user?.email || '',
         },
         paymentMethod: 'Cash on Delivery (COD)',
+        couponCode: appliedCoupon?.code || '',
       };
 
       const response = await fetch(`${API_URL}/api/orders/`, {
@@ -674,11 +708,26 @@ export default function Checkout() {
               Order Summary
             </h2>
             
-            <div className="space-y-4 mb-8 text-sm font-sans tracking-wide text-stone-600">
+            <div className="space-y-4 mb-6 text-sm font-sans tracking-wide text-stone-600">
               <div className="flex justify-between items-center">
                 <span>Subtotal ({checkoutItems.reduce((acc, i) => acc + i.quantity, 0)} items)</span>
                 <span className="text-stone-900">₹{safeCartTotal.toFixed(2)}</span>
               </div>
+              {appliedCoupon && (
+                <div className="flex justify-between items-center text-emerald-700">
+                  <span className="flex items-center gap-2">
+                    <span>Promo ({appliedCoupon.code})</span>
+                    <button
+                      type="button"
+                      onClick={() => setAppliedCoupon(null)}
+                      className="text-[10px] uppercase tracking-wider text-stone-400 hover:text-stone-900 underline"
+                    >
+                      Remove
+                    </button>
+                  </span>
+                  <span>− ₹{discountAmount.toFixed(2)}</span>
+                </div>
+              )}
               <div className="flex justify-between items-center">
                 <span>Estimated Tax (8%)</span>
                 <span className="text-stone-900">₹{tax.toFixed(2)}</span>
@@ -687,6 +736,45 @@ export default function Checkout() {
                 <span>Campus Delivery</span>
                 <span className="text-emerald-700 font-medium">Free</span>
               </div>
+            </div>
+
+            {/* Promo Code Input */}
+            <div className="mb-6 pt-4 border-t border-stone-100">
+              <label className="block text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-2">
+                Campus Promo Code
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={promoInput}
+                  onChange={(e) => {
+                    setPromoInput(e.target.value.toUpperCase());
+                    if (promoError) setPromoError('');
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleApplyPromo();
+                    }
+                  }}
+                  placeholder="e.g., FRESHERS10"
+                  className="flex-1 bg-[#FAF9F6] border border-stone-200 px-3 py-2 text-xs text-stone-900 uppercase font-mono focus:border-stone-900 focus:bg-white focus:outline-none"
+                />
+                <button
+                  type="button"
+                  disabled={isValidatingPromo || !promoInput.trim()}
+                  onClick={handleApplyPromo}
+                  className="px-4 py-2 bg-stone-900 text-white text-[10px] uppercase tracking-widest font-medium hover:bg-black transition-colors disabled:opacity-40"
+                >
+                  {isValidatingPromo ? '...' : 'Apply'}
+                </button>
+              </div>
+              {promoError && (
+                <p className="text-[11px] text-red-700 mt-1.5">{promoError}</p>
+              )}
+              {appliedCoupon && (
+                <p className="text-[11px] text-emerald-700 mt-1.5">{appliedCoupon.message}</p>
+              )}
             </div>
             
             <div className="border-t border-stone-200 pt-6 mb-6">

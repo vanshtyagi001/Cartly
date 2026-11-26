@@ -1,6 +1,7 @@
 from django.urls import path
 from .views import (
     AdminCategoriesView,
+    AdminCouponsView,
     AdminLoginView,
     AdminMeView,
     AdminMetricsView,
@@ -28,4 +29,6 @@ urlpatterns = [
     path("sellers/<str:user_id>/status", AdminSellerStatusView.as_view(), name="admin-seller-status"),
     path("support", AdminSupportView.as_view(), name="admin-support"),
     path("support/<str:ticket_id>", AdminSupportView.as_view(), name="admin-support-update"),
+    path("coupons", AdminCouponsView.as_view(), name="admin-coupons"),
+    path("coupons/<str:coupon_id>", AdminCouponsView.as_view(), name="admin-coupon-detail"),
 ]

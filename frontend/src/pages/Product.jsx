@@ -61,8 +61,26 @@ export default function Product() {
         .catch(() => null),
     ])
       .then(([data, revData]) => {
-        setProduct(data?.product || null);
+        const fetchedProd = data?.product || null;
+        setProduct(fetchedProd);
         setSuggestions(Array.isArray(data?.suggestions) ? data.suggestions : []);
+        if (fetchedProd) {
+          try {
+            const key = 'cartly_recently_viewed';
+            const prev = JSON.parse(localStorage.getItem(key) || '[]');
+            const compact = {
+              id: fetchedProd.id,
+              name: fetchedProd.name,
+              category: fetchedProd.category,
+              price: fetchedProd.price,
+              img: fetchedProd.img,
+            };
+            const next = [compact, ...prev.filter((p) => p.id !== fetchedProd.id)].slice(0, 4);
+            localStorage.setItem(key, JSON.stringify(next));
+          } catch {
+            // ignore storage errors
+          }
+        }
         if (revData) {
           setReviewSummary({
             averageRating: revData.averageRating || 0,

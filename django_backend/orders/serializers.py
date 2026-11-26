@@ -24,6 +24,8 @@ def format_order(order_doc: dict) -> dict:
         "total": f"₹{total_val:,.2f}",
         "rawTotal": total_val,
         "subtotal": float(order_doc.get("subtotal", 0)),
+        "discountAmount": float(order_doc.get("discountAmount", 0)),
+        "couponCode": order_doc.get("couponCode", ""),
         "tax": float(order_doc.get("tax", 0)),
         "status": order_doc.get("status", "Confirmed"),
         "paymentMethod": order_doc.get("paymentMethod", "Cash on Delivery"),

@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.auth import get_user_from_request
-from products.repository import get_collection as get_products_collection
+from products.repository import get_collection as get_products_collection, get_coupons_collection
 from .repository import get_orders_collection
 from .serializers import format_order, generate_order_id
 
@@ -132,7 +132,18 @@ class OrderListCreateView(APIView):
             )
 
         tax = round(subtotal * 0.08, 2)
-        total = round(subtotal + tax, 2)
+        coupon_code = str(data.get("couponCode", "")).strip().upper()
+        discount_amount = 0.0
+        applied_coupon = ""
+        if coupon_code:
+            ok, discount_val, _msg, clean_code = evaluate_coupon(coupon_code, subtotal)
+            if ok:
+                discount_amount = discount_val
+                applied_coupon = clean_code
+
+        discounted_subtotal = max(0.0, subtotal - discount_amount)
+        tax = round(discounted_subtotal * 0.08, 2)
+        total = round(discounted_subtotal + tax, 2)
 
         now = datetime.now(timezone.utc)
         order_doc = {
@@ -153,6 +164,8 @@ class OrderListCreateView(APIView):
             "paymentMethod": "Cash on Delivery",
             "paymentStatus": "Pending (Cash on Delivery)",
             "subtotal": subtotal,
+            "discountAmount": discount_amount,
+            "couponCode": applied_coupon,
             "tax": tax,
             "shipping": 0,
             "total": total,
@@ -307,6 +320,56 @@ class OrderCancelView(APIView):
             {
                 "message": f"Order #{doc.get('orderId', order_id)} has been cancelled and stock restored.",
                 "order": format_order(updated_doc),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+def evaluate_coupon(raw_code: str, subtotal: float):
+    """Validate a promo code against MongoDB coupons and compute discount amount."""
+    code = str(raw_code or "").strip().upper()
+    if not code:
+        return False, 0.0, "Please enter a promo code.", ""
+
+    coupon = get_coupons_collection().find_one({"code": code})
+    if not coupon or not coupon.get("isActive", True):
+        return False, 0.0, f"Promo code '{code}' is invalid or expired.", code
+
+    min_order = float(coupon.get("minOrder", 0) or 0)
+    if subtotal < min_order:
+        return False, 0.0, f"Code '{code}' requires a minimum order of ₹{min_order:,.0f}.", code
+
+    d_type = coupon.get("discountType", "percent")
+    d_val = float(coupon.get("discountValue", 0) or 0)
+    if d_type == "percent":
+        discount = round(min(subtotal, subtotal * (d_val / 100.0)), 2)
+        label = f"{int(d_val) if d_val.is_integer() else d_val}% off"
+    else:
+        discount = round(min(subtotal, d_val), 2)
+        label = f"₹{d_val:,.0f} off"
+
+    return True, discount, f"Code '{code}' applied ({label}).", code
+
+
+class ValidateCouponView(APIView):
+    def post(self, request):
+        data = request.data or {}
+        code = str(data.get("code", "")).strip().upper()
+        try:
+            subtotal = float(data.get("subtotal", 0) or 0)
+        except (ValueError, TypeError):
+            subtotal = 0.0
+
+        ok, discount, message, clean_code = evaluate_coupon(code, subtotal)
+        if not ok:
+            return Response({"valid": False, "error": message}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(
+            {
+                "valid": True,
+                "code": clean_code,
+                "discountAmount": discount,
+                "message": message,
             },
             status=status.HTTP_200_OK,
         )
