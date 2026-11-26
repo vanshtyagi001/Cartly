@@ -1123,7 +1123,7 @@ export default function SellerStudio() {
                       {item.price}
                     </div>
 
-                    <div className="sm:col-span-2">
+                    <div className="sm:col-span-2 space-y-1">
                       <span className={`inline-block px-2 py-0.5 text-[10px] uppercase tracking-wider font-semibold ${
                         (item.stock !== undefined ? item.stock : 25) > 0
                           ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
@@ -1131,6 +1131,11 @@ export default function SellerStudio() {
                       }`}>
                         {(item.stock !== undefined ? item.stock : 25) > 0 ? `${item.stock !== undefined ? item.stock : 25} in stock` : 'Out of stock'}
                       </span>
+                      {item.restockAlertCount > 0 && (
+                        <span className="block text-[10px] text-amber-800 font-medium">
+                          {item.restockAlertCount} {item.restockAlertCount === 1 ? 'student' : 'students'} waiting for restock
+                        </span>
+                      )}
                     </div>
 
                     <div className="sm:col-span-1 flex items-center justify-end gap-2">

@@ -15,7 +15,13 @@ from accounts.auth import (
 from accounts.repository import get_users_collection
 from orders.repository import get_orders_collection
 from orders.serializers import format_order
-from products.repository import get_categories_collection, get_collection as get_products_collection
+from products.repository import (
+    get_categories_collection,
+    get_collection as get_products_collection,
+    get_newsletter_collection,
+    get_stock_alerts_collection,
+    get_support_tickets_collection,
+)
 from products.serializers import format_product, normalize_product_images
 from products.views import DEFAULT_CATEGORIES, ensure_default_categories
 
@@ -564,5 +570,87 @@ class AdminCategoriesView(APIView):
             return Response({"error": f"Category '{category_name}' not found."}, status=status.HTTP_404_NOT_FOUND)
 
         return Response({"message": f"Category '{category_name}' removed."}, status=status.HTTP_200_OK)
+
+
+class AdminSupportView(APIView):
+    """
+    Admin endpoint for viewing support tickets, newsletter subscribers, and restock alerts.
+    GET /api/admin/support
+    PATCH /api/admin/support/<ticket_id> -> { "status": "Open" | "In Progress" | "Resolved" }
+    """
+    def get(self, request):
+        is_ok, res = check_is_admin(request)
+        if not is_ok:
+            return res
+
+        tickets_docs = list(get_support_tickets_collection().find().sort("createdAt", -1))
+        tickets = []
+        for t in tickets_docs:
+            created = t.get("createdAt")
+            tickets.append({
+                "id": str(t["_id"]),
+                "name": t.get("name", ""),
+                "email": t.get("email", ""),
+                "orderId": t.get("orderId", ""),
+                "topic": t.get("topic", "General Inquiry"),
+                "message": t.get("message", ""),
+                "status": t.get("status", "Open"),
+                "date": created.strftime("%b %d, %Y %I:%M %p") if isinstance(created, datetime) else str(created or ""),
+            })
+
+        subs_docs = list(get_newsletter_collection().find().sort("createdAt", -1))
+        subscribers = [
+            {
+                "id": str(s["_id"]),
+                "email": s.get("email", ""),
+                "date": s.get("createdAt").strftime("%b %d, %Y") if isinstance(s.get("createdAt"), datetime) else "",
+            }
+            for s in subs_docs
+        ]
+
+        alerts_docs = list(get_stock_alerts_collection().find().sort("createdAt", -1))
+        alerts = [
+            {
+                "id": str(a["_id"]),
+                "productId": a.get("productId"),
+                "productName": a.get("productName", ""),
+                "email": a.get("email", ""),
+                "date": a.get("createdAt").strftime("%b %d, %Y") if isinstance(a.get("createdAt"), datetime) else "",
+            }
+            for a in alerts_docs
+        ]
+
+        return Response(
+            {
+                "tickets": tickets,
+                "subscribers": subscribers,
+                "stockAlerts": alerts,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def patch(self, request, ticket_id):
+        is_ok, res = check_is_admin(request)
+        if not is_ok:
+            return res
+
+        data = request.data or {}
+        new_status = str(data.get("status", "")).strip()
+        if new_status not in ("Open", "In Progress", "Resolved"):
+            return Response({"error": "Invalid ticket status."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            oid = ObjectId(ticket_id)
+        except Exception:
+            return Response({"error": "Invalid ticket ID."}, status=status.HTTP_400_BAD_REQUEST)
+
+        result = get_support_tickets_collection().update_one(
+            {"_id": oid},
+            {"$set": {"status": new_status, "updatedAt": datetime.now(timezone.utc)}},
+        )
+        if result.matched_count == 0:
+            return Response({"error": "Support ticket not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        return Response({"message": f"Ticket marked as '{new_status}'."}, status=status.HTTP_200_OK)
 
 

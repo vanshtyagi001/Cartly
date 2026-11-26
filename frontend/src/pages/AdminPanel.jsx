@@ -52,6 +52,7 @@ export default function AdminPanel() {
   const [isProcessingSellerAction, setIsProcessingSellerAction] = useState(false);
   const [editingSellerStore, setEditingSellerStore] = useState(null);
   const [isSavingSellerStore, setIsSavingSellerStore] = useState(false);
+  const [supportData, setSupportData] = useState({ tickets: [], subscribers: [], stockAlerts: [] });
   const [catalogViewMode, setCatalogViewMode] = useState('tiles'); // 'tiles' | 'table'
   const [catalogPage, setCatalogPage] = useState(1);
   const [catalogPageSize, setCatalogPageSize] = useState(8);
@@ -140,6 +141,17 @@ export default function AdminPanel() {
       if (cRes.ok) {
         const cData = await cRes.json();
         setCategories(cData.categories || []);
+      }
+
+      // 6. Support Tickets, Newsletter Subscribers & Restock Alerts
+      const sRes = await fetch(`${API_URL}/api/admin/support`, { headers });
+      if (sRes.ok) {
+        const sData = await sRes.json();
+        setSupportData({
+          tickets: sData.tickets || [],
+          subscribers: sData.subscribers || [],
+          stockAlerts: sData.stockAlerts || [],
+        });
       }
     } catch (err) {
       console.error('Error fetching admin data:', err);
@@ -478,6 +490,25 @@ export default function AdminPanel() {
       showNotice(err.message || 'Failed to update seller details.');
     } finally {
       setIsSavingSellerStore(false);
+    }
+  };
+
+  const handleUpdateTicketStatus = async (ticketId, status) => {
+    try {
+      const res = await fetch(`${API_URL}/api/admin/support/${ticketId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ status }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update ticket.');
+      showNotice(data.message || `Ticket updated to ${status}.`);
+      fetchAdminData();
+    } catch (err) {
+      showNotice(err.message || 'Error updating support ticket.');
     }
   };
 
@@ -1265,6 +1296,21 @@ export default function AdminPanel() {
               </span>
             )}
             {activeTab === 'users' && <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-stone-900" />}
+          </button>
+
+          <button
+            onClick={() => setActiveTab('support')}
+            className={`pb-4 text-xs uppercase tracking-widest font-medium transition-colors relative whitespace-nowrap ${
+              activeTab === 'support' ? 'text-stone-900 font-semibold' : 'text-stone-400 hover:text-stone-600'
+            }`}
+          >
+            Support &amp; Alerts ({supportData.tickets.length})
+            {supportData.tickets.filter((t) => t.status === 'Open').length > 0 && (
+              <span className="ml-2 px-1.5 py-0.5 text-[9px] bg-stone-900 text-white font-bold rounded-full">
+                {supportData.tickets.filter((t) => t.status === 'Open').length}
+              </span>
+            )}
+            {activeTab === 'support' && <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-stone-900" />}
           </button>
         </div>
 
@@ -2254,6 +2300,130 @@ export default function AdminPanel() {
             </div>
           );
         })()}
+
+        {/* TAB 5: SUPPORT TICKETS, NEWSLETTER & RESTOCK ALERTS */}
+        {activeTab === 'support' && (
+          <div className="space-y-10">
+            {/* Summary Strip */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+              <div className="bg-white border border-stone-200 p-6 shadow-sm">
+                <span className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold block mb-2">
+                  Open Support Tickets
+                </span>
+                <span className="text-3xl font-serif text-stone-900">
+                  {supportData.tickets.filter((t) => t.status === 'Open').length}
+                </span>
+              </div>
+              <div className="bg-white border border-stone-200 p-6 shadow-sm">
+                <span className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold block mb-2">
+                  Restock Alert Requests
+                </span>
+                <span className="text-3xl font-serif text-stone-900">
+                  {supportData.stockAlerts.length}
+                </span>
+              </div>
+              <div className="bg-white border border-stone-200 p-6 shadow-sm">
+                <span className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold block mb-2">
+                  Dispatch Subscribers
+                </span>
+                <span className="text-3xl font-serif text-stone-900">
+                  {supportData.subscribers.length}
+                </span>
+              </div>
+            </div>
+
+            {/* Support Tickets Table */}
+            <div className="bg-white border border-stone-200 shadow-sm">
+              <div className="p-6 border-b border-stone-200">
+                <h2 className="font-serif text-xl text-stone-900">Student Support Inquiries</h2>
+                <p className="text-xs text-stone-500 mt-1">Submitted from /contact</p>
+              </div>
+              {supportData.tickets.length === 0 ? (
+                <div className="p-10 text-center text-stone-400 font-serif italic">
+                  No support tickets submitted yet.
+                </div>
+              ) : (
+                <div className="divide-y divide-stone-200">
+                  {supportData.tickets.map((t) => (
+                    <div key={t.id} className="p-6 flex flex-col md:flex-row md:items-start justify-between gap-4">
+                      <div className="space-y-1.5 max-w-2xl">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-serif text-base text-stone-900 font-medium">{t.name}</span>
+                          <span className="text-xs text-stone-400 font-mono">({t.email})</span>
+                          {t.orderId && (
+                            <span className="text-[10px] uppercase tracking-wider bg-[#FAF9F6] border border-stone-200 px-2 py-0.5 text-stone-700">
+                              Order: {t.orderId}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold">
+                          {t.topic} · {t.date}
+                        </p>
+                        <p className="text-sm text-stone-600 leading-relaxed pt-1">{t.message}</p>
+                      </div>
+
+                      <select
+                        value={t.status}
+                        onChange={(e) => handleUpdateTicketStatus(t.id, e.target.value)}
+                        className="bg-[#FAF9F6] border border-stone-200 text-xs font-medium text-stone-900 px-3 py-2 focus:outline-none focus:border-stone-900 shrink-0"
+                      >
+                        <option value="Open">Open</option>
+                        <option value="In Progress">In Progress</option>
+                        <option value="Resolved">Resolved</option>
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Restock Alerts & Newsletter Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="bg-white border border-stone-200 shadow-sm">
+                <div className="p-6 border-b border-stone-200">
+                  <h2 className="font-serif text-xl text-stone-900">Restock Demand Alerts</h2>
+                </div>
+                {supportData.stockAlerts.length === 0 ? (
+                  <div className="p-8 text-center text-stone-400 font-serif italic text-sm">
+                    No active restock requests.
+                  </div>
+                ) : (
+                  <div className="divide-y divide-stone-100 max-h-80 overflow-y-auto">
+                    {supportData.stockAlerts.map((a) => (
+                      <div key={a.id} className="px-6 py-3.5 flex items-center justify-between text-xs">
+                        <div>
+                          <p className="font-serif text-stone-900 text-sm">{a.productName || `Item #${a.productId}`}</p>
+                          <p className="text-stone-500 font-mono text-[11px]">{a.email}</p>
+                        </div>
+                        <span className="text-stone-400 text-[11px]">{a.date}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-white border border-stone-200 shadow-sm">
+                <div className="p-6 border-b border-stone-200">
+                  <h2 className="font-serif text-xl text-stone-900">Dispatch Newsletter Subscribers</h2>
+                </div>
+                {supportData.subscribers.length === 0 ? (
+                  <div className="p-8 text-center text-stone-400 font-serif italic text-sm">
+                    No newsletter subscribers yet.
+                  </div>
+                ) : (
+                  <div className="divide-y divide-stone-100 max-h-80 overflow-y-auto">
+                    {supportData.subscribers.map((s) => (
+                      <div key={s.id} className="px-6 py-3.5 flex items-center justify-between text-xs">
+                        <span className="font-mono text-stone-800">{s.email}</span>
+                        <span className="text-stone-400 text-[11px]">{s.date}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     </main>

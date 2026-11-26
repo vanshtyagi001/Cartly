@@ -5,9 +5,16 @@ from pymongo.errors import DuplicateKeyError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .repository import get_categories_collection, get_collection, get_reviews_collection
+from .repository import (
+    get_categories_collection,
+    get_collection,
+    get_newsletter_collection,
+    get_reviews_collection,
+    get_stock_alerts_collection,
+    get_support_tickets_collection,
+)
 from .serializers import format_product, json_safe, validate_product_payload
-from accounts.auth import get_user_from_request
+from accounts.auth import get_user_from_request, is_valid_email, normalize_email
 from orders.repository import get_orders_collection
 
 
@@ -258,3 +265,104 @@ class ProductReviewsView(APIView):
         summary = _build_reviews_summary(product_id)
         summary["message"] = "Thank you! Your review has been published."
         return Response(summary, status=201)
+
+
+class ProductStockAlertView(APIView):
+    def post(self, request, product_id):
+        data = request.data or {}
+        raw_email = str(data.get("email", "")).strip()
+        if not raw_email or not is_valid_email(raw_email):
+            return Response({"error": "Please enter a valid campus email address."}, status=400)
+
+        clean_email = normalize_email(raw_email)
+        prod = get_collection().find_one({"productId": product_id})
+        if not prod:
+            return Response({"error": "Product not found."}, status=404)
+
+        now = datetime.now(timezone.utc)
+        alerts_col = get_stock_alerts_collection()
+        alerts_col.update_one(
+            {"productId": product_id, "email": clean_email},
+            {
+                "$set": {
+                    "productId": product_id,
+                    "productName": prod.get("name", ""),
+                    "sellerId": prod.get("sellerId"),
+                    "email": clean_email,
+                    "notified": False,
+                    "updatedAt": now,
+                },
+                "$setOnInsert": {"createdAt": now},
+            },
+            upsert=True,
+        )
+
+        return Response(
+            {
+                "message": f"You're on the list! We'll notify {clean_email} when {prod.get('name', 'this item')} is restocked.",
+                "email": clean_email,
+                "productId": product_id,
+            },
+            status=201,
+        )
+
+
+class SupportTicketCreateView(APIView):
+    def post(self, request):
+        data = request.data or {}
+        name = str(data.get("name", "")).strip()
+        raw_email = str(data.get("email", "")).strip()
+        order_id = str(data.get("orderId", "")).strip()
+        topic = str(data.get("topic", "General Inquiry")).strip()
+        message = str(data.get("message", "")).strip()
+
+        if not name:
+            return Response({"error": "Full name is required."}, status=400)
+        if not raw_email or not is_valid_email(raw_email):
+            return Response({"error": "Please provide a valid email address."}, status=400)
+        if not message:
+            return Response({"error": "Please enter your message."}, status=400)
+
+        now = datetime.now(timezone.utc)
+        tickets_col = get_support_tickets_collection()
+        doc = {
+            "name": name,
+            "email": normalize_email(raw_email),
+            "orderId": order_id,
+            "topic": topic,
+            "message": message,
+            "status": "Open",
+            "createdAt": now,
+            "updatedAt": now,
+        }
+        ins = tickets_col.insert_one(doc)
+        return Response(
+            {
+                "message": "Your support inquiry has been logged. Our campus desk will respond shortly.",
+                "ticketId": str(ins.inserted_id),
+            },
+            status=201,
+        )
+
+
+class NewsletterSubscribeView(APIView):
+    def post(self, request):
+        data = request.data or {}
+        raw_email = str(data.get("email", "")).strip()
+        if not raw_email or not is_valid_email(raw_email):
+            return Response({"error": "Please enter a valid email address."}, status=400)
+
+        clean_email = normalize_email(raw_email)
+        now = datetime.now(timezone.utc)
+        get_newsletter_collection().update_one(
+            {"email": clean_email},
+            {
+                "$set": {"email": clean_email, "active": True, "updatedAt": now},
+                "$setOnInsert": {"createdAt": now},
+            },
+            upsert=True,
+        )
+        return Response(
+            {"message": "Subscribed to the Cartly dispatch.", "email": clean_email},
+            status=201,
+        )

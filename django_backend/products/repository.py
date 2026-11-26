@@ -11,25 +11,33 @@ def get_client():
     return MongoClient(settings.MONGO_URI, serverSelectionTimeoutMS=5000)
 
 
-def get_collection():
+def _get_db():
     client = get_client()
     database = settings.MONGO_DATABASE
     if not database:
         database = client.get_default_database("test").name
-    return client[database][settings.MONGO_COLLECTION]
+    return client[database]
+
+
+def get_collection():
+    return _get_db()[settings.MONGO_COLLECTION]
 
 
 def get_categories_collection():
-    client = get_client()
-    database = settings.MONGO_DATABASE
-    if not database:
-        database = client.get_default_database("test").name
-    return client[database]["categories"]
+    return _get_db()["categories"]
 
 
 def get_reviews_collection():
-    client = get_client()
-    database = settings.MONGO_DATABASE
-    if not database:
-        database = client.get_default_database("test").name
-    return client[database]["reviews"]
+    return _get_db()["reviews"]
+
+
+def get_stock_alerts_collection():
+    return _get_db()["stock_alerts"]
+
+
+def get_support_tickets_collection():
+    return _get_db()["support_tickets"]
+
+
+def get_newsletter_collection():
+    return _get_db()["newsletter_subscribers"]

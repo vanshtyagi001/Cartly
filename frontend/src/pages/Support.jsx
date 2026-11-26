@@ -43,24 +43,45 @@ export default function Support({ defaultSection = 'contact' }) {
     message: '',
   });
   const [contactSubmitted, setContactSubmitted] = useState(false);
+  const [isSubmittingContact, setIsSubmittingContact] = useState(false);
+  const [contactError, setContactError] = useState('');
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [location.pathname]);
 
-  const handleContactSubmit = (e) => {
+  const handleContactSubmit = async (e) => {
     e.preventDefault();
+    setContactError('');
     if (!contactForm.name.trim() || !contactForm.email.trim() || !contactForm.message.trim()) {
       return;
     }
-    setContactSubmitted(true);
-    setContactForm({
-      name: '',
-      email: '',
-      orderId: '',
-      topic: 'Order & Delivery Inquiry',
-      message: '',
-    });
+
+    setIsSubmittingContact(true);
+    try {
+      const res = await fetch(`${API_URL}/api/support/tickets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(contactForm),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Could not submit inquiry.');
+      }
+      setContactSubmitted(true);
+      setContactForm({
+        name: '',
+        email: '',
+        orderId: '',
+        topic: 'Order & Delivery Inquiry',
+        message: '',
+      });
+    } catch (err) {
+      setContactError(err.message || 'Failed to send inquiry.');
+    } finally {
+      setIsSubmittingContact(false);
+    }
   };
 
   return (
@@ -235,11 +256,18 @@ export default function Support({ defaultSection = 'contact' }) {
                     />
                   </div>
 
+                  {contactError && (
+                    <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs">
+                      {contactError}
+                    </div>
+                  )}
+
                   <button
                     type="submit"
-                    className="bg-stone-900 text-white text-xs uppercase tracking-[0.15em] font-medium py-4 px-8 hover:bg-black transition-colors"
+                    disabled={isSubmittingContact}
+                    className="bg-stone-900 text-white text-xs uppercase tracking-[0.15em] font-medium py-4 px-8 hover:bg-black transition-colors disabled:opacity-50"
                   >
-                    Submit Inquiry
+                    {isSubmittingContact ? 'Submitting...' : 'Submit Inquiry'}
                   </button>
                 </form>
               )}

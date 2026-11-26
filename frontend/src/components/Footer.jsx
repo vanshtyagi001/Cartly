@@ -3,7 +3,33 @@ import { Link } from 'react-router-dom';
 
 export default function Footer() {
   const [isGridVisible, setIsGridVisible] = useState(false);
+  const [newsletterEmail, setNewsletterEmail] = useState('');
+  const [newsletterMessage, setNewsletterMessage] = useState('');
+  const [isSubscribing, setIsSubscribing] = useState(false);
   const lastScrollY = useRef(0);
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
+  const handleNewsletterSubmit = async (e) => {
+    e.preventDefault();
+    if (!newsletterEmail.trim()) return;
+    setIsSubscribing(true);
+    setNewsletterMessage('');
+    try {
+      const res = await fetch(`${API_URL}/api/newsletter`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: newsletterEmail.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Subscription failed.');
+      setNewsletterMessage(data.message || 'Subscribed to the Cartly dispatch.');
+      setNewsletterEmail('');
+    } catch (err) {
+      setNewsletterMessage(err.message || 'Could not subscribe right now.');
+    } finally {
+      setIsSubscribing(false);
+    }
+  };
 
   // Track scroll direction to show/hide the grid
   useEffect(() => {
@@ -76,21 +102,31 @@ export default function Footer() {
           </div>
 
           {/* Minimalist Newsletter */}
-          <div className="max-w-md w-full relative z-20 mt-12">
+          <form onSubmit={handleNewsletterSubmit} className="max-w-md w-full relative z-20 mt-12">
             <label className="text-[10px] uppercase tracking-[0.2em] font-medium text-stone-500 mb-4 block">
               Subscribe to the dispatch
             </label>
             <div className="flex border-b border-stone-700 pb-2 transition-colors focus-within:border-stone-300">
               <input 
-                type="email" 
+                type="email"
+                required
+                value={newsletterEmail}
+                onChange={(e) => setNewsletterEmail(e.target.value)}
                 placeholder="Email address" 
                 className="w-full bg-transparent border-none outline-none text-stone-100 placeholder:text-stone-600 font-sans text-sm"
               />
-              <button className="text-[10px] uppercase tracking-[0.2em] text-stone-100 hover:text-stone-400 transition-colors shrink-0">
-                Submit
+              <button
+                type="submit"
+                disabled={isSubscribing}
+                className="text-[10px] uppercase tracking-[0.2em] text-stone-100 hover:text-stone-400 transition-colors shrink-0 disabled:opacity-50"
+              >
+                {isSubscribing ? 'Sending...' : 'Submit'}
               </button>
             </div>
-          </div>
+            {newsletterMessage && (
+              <p className="text-[11px] text-stone-300 mt-3">{newsletterMessage}</p>
+            )}
+          </form>
         </div>
 
         {/* Right Side (30%): Clustered Navigation with Real Routes */}

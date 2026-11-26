@@ -8,7 +8,7 @@ from accounts.auth import get_user_from_request, serialize_user
 from accounts.repository import get_users_collection
 from orders.repository import get_orders_collection
 from orders.serializers import format_order
-from products.repository import get_collection as get_products_collection
+from products.repository import get_collection as get_products_collection, get_stock_alerts_collection
 from products.serializers import format_product, normalize_product_images
 
 
@@ -185,8 +185,14 @@ class SellerProductListCreateView(APIView):
 
         user_id = str(user["_id"])
         products_col = get_products_collection()
+        alerts_col = get_stock_alerts_collection()
         docs = list(products_col.find({"sellerId": user_id}))
-        return Response([format_product(p) for p in docs], status=status.HTTP_200_OK)
+        formatted_list = []
+        for p in docs:
+            item = format_product(p)
+            item["restockAlertCount"] = alerts_col.count_documents({"productId": p.get("productId")})
+            formatted_list.append(item)
+        return Response(formatted_list, status=status.HTTP_200_OK)
 
     def post(self, request):
         is_ok, res = check_is_approved_seller(request)

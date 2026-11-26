@@ -369,15 +369,21 @@ export default function Product() {
                   </div>
                 ) : (
                   <form
-                    onSubmit={(e) => {
+                    onSubmit={async (e) => {
                       e.preventDefault();
                       if (!notifyEmail.trim()) return;
+                      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
                       try {
+                        await fetch(`${apiUrl}/api/products/${product.id}/stock-alert`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ email: notifyEmail.trim() }),
+                        });
                         const existing = JSON.parse(localStorage.getItem('cartly_stock_alerts') || '{}');
                         existing[product.id] = notifyEmail.trim();
                         localStorage.setItem('cartly_stock_alerts', JSON.stringify(existing));
                       } catch {
-                        // ignore storage errors
+                        // ignore network/storage errors
                       }
                       setNotifySubmitted(true);
                     }}
