@@ -141,44 +141,44 @@ export default function HomeCatalog() {
               )}
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 bg-white border border-stone-200 shadow-sm overflow-hidden">
-              {/* Image Side */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 lg:h-[460px] bg-white border border-stone-200 shadow-sm overflow-hidden">
+              {/* Image Side — Fixed dimensions so card size never jumps */}
               <Link
                 to={`/product/${activeSpotlight.id}`}
-                className="lg:col-span-6 bg-[#FAF9F6] border-b lg:border-b-0 lg:border-r border-stone-200 aspect-[4/3] lg:aspect-auto lg:min-h-[420px] overflow-hidden group relative"
+                className="lg:col-span-6 h-[300px] sm:h-[360px] lg:h-full bg-[#FAF9F6] border-b lg:border-b-0 lg:border-r border-stone-200 overflow-hidden group relative block"
               >
                 <img
                   key={activeSpotlight.id}
                   src={activeSpotlight.img}
                   alt={activeSpotlight.name}
-                  className="w-full h-full object-cover mix-blend-multiply group-hover:scale-105 transition-transform duration-700"
+                  className="absolute inset-0 w-full h-full object-cover object-center mix-blend-multiply group-hover:scale-105 transition-transform duration-700"
                 />
-                <span className="absolute top-4 left-4 bg-white/95 backdrop-blur-sm border border-stone-200 px-3 py-1 text-[9px] uppercase tracking-[0.2em] font-semibold text-stone-800">
+                <span className="absolute top-4 left-4 z-10 bg-white/95 backdrop-blur-sm border border-stone-200 px-3 py-1 text-[9px] uppercase tracking-[0.2em] font-semibold text-stone-800">
                   {activeSpotlight.category}
                 </span>
               </Link>
 
               {/* Details Side */}
-              <div className="lg:col-span-6 p-8 sm:p-12 lg:p-14 flex flex-col justify-between">
+              <div className="lg:col-span-6 h-full p-8 sm:p-10 lg:p-12 flex flex-col justify-between overflow-hidden">
                 <div>
                   <div className="flex items-center justify-between gap-3 mb-4">
-                    <span className="text-[10px] uppercase tracking-[0.2em] text-stone-400 font-medium">
+                    <span className="text-[10px] uppercase tracking-[0.2em] text-stone-400 font-medium truncate">
                       Sold by {activeSpotlight.sellerName || 'Cartly Campus Hub'}
                     </span>
-                    <span className="text-[10px] uppercase tracking-wider font-semibold px-2.5 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200">
+                    <span className="text-[10px] uppercase tracking-wider font-semibold px-2.5 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 shrink-0">
                       {activeSpotlight.stock !== undefined ? `${activeSpotlight.stock} in stock` : 'In Stock'}
                     </span>
                   </div>
 
                   <Link to={`/product/${activeSpotlight.id}`} className="group">
-                    <h3 className="text-3xl sm:text-4xl font-serif text-stone-900 tracking-tight mb-4 group-hover:underline">
+                    <h3 className="text-2xl sm:text-3xl lg:text-4xl font-serif text-stone-900 tracking-tight mb-3 group-hover:underline line-clamp-2">
                       {activeSpotlight.name}
                     </h3>
                   </Link>
 
-                  <p className="text-2xl font-sans text-stone-900 mb-6">{activeSpotlight.price}</p>
+                  <p className="text-xl sm:text-2xl font-sans text-stone-900 mb-4">{activeSpotlight.price}</p>
 
-                  <p className="text-stone-500 text-sm leading-relaxed mb-8 line-clamp-3">
+                  <p className="text-stone-500 text-sm leading-relaxed mb-6 line-clamp-3">
                     {activeSpotlight.description ||
                       'Verified campus essential ready for fast hostel and campus delivery.'}
                   </p>
