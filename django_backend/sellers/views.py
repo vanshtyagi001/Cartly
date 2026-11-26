@@ -390,3 +390,93 @@ class SellerOrderStatusUpdateView(APIView):
             {"message": f"Order #{order_id} marked as '{new_status}'."},
             status=status.HTTP_200_OK,
         )
+
+
+class SellerProfileView(APIView):
+    """
+    Endpoint for sellers to view and update their registered company/store profile.
+    GET /api/seller/profile
+    PUT /api/seller/profile -> { storeName, campusLocation, phone, bio }
+    """
+    def get(self, request):
+        is_ok, res = check_is_approved_seller(request)
+        if not is_ok:
+            return res
+        user = res
+
+        profile = user.get("sellerProfile") or user.get("sellerDetails") or {}
+        return Response(
+            {
+                "storeName": profile.get("storeName") or user.get("name") or "Campus Store",
+                "campusLocation": profile.get("campusLocation") or "North Campus",
+                "phone": profile.get("phone") or user.get("phone") or "",
+                "bio": profile.get("bio") or "",
+                "isVerified": profile.get("isVerified", True),
+                "sellerStatus": user.get("sellerStatus", "approved"),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def put(self, request):
+        is_ok, res = check_is_approved_seller(request)
+        if not is_ok:
+            return res
+        user = res
+
+        data = request.data or {}
+        store_name = str(data.get("storeName", "")).strip()
+        campus_location = str(data.get("campusLocation", "")).strip()
+        phone = str(data.get("phone", "")).strip()
+        bio = str(data.get("bio", "")).strip()
+
+        if not store_name:
+            return Response(
+                {"error": "Registered Company / Store name cannot be empty."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        now = datetime.now(timezone.utc)
+        users_col = get_users_collection()
+        existing_profile = user.get("sellerProfile") or user.get("sellerDetails") or {}
+
+        updated_profile = dict(existing_profile)
+        updated_profile["storeName"] = store_name
+        if campus_location:
+            updated_profile["campusLocation"] = campus_location
+        if phone:
+            updated_profile["phone"] = phone
+        if "bio" in data:
+            updated_profile["bio"] = bio
+        updated_profile["updatedAt"] = now.isoformat()
+
+        users_col.update_one(
+            {"_id": user["_id"]},
+            {
+                "$set": {
+                    "sellerProfile": updated_profile,
+                    "sellerDetails": updated_profile,
+                    "updatedAt": now,
+                }
+            },
+        )
+
+        # Synchronize updated seller company/store name across all this seller's products
+        user_id = str(user["_id"])
+        products_col = get_products_collection()
+        prod_update = {"sellerName": store_name, "updatedAt": now}
+        if campus_location:
+            prod_update["sellerLocation"] = campus_location
+
+        products_col.update_many({"sellerId": user_id}, {"$set": prod_update})
+
+        updated_user = users_col.find_one({"_id": user["_id"]})
+
+        return Response(
+            {
+                "message": f"Company profile updated to '{store_name}'. All your active listings have been updated.",
+                "user": serialize_user(updated_user),
+                "sellerProfile": updated_profile,
+            },
+            status=status.HTTP_200_OK,
+        )
+

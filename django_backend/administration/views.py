@@ -400,6 +400,73 @@ class AdminSellerStatusView(APIView):
         )
 
 
+class AdminSellerUpdateView(APIView):
+    """
+    Endpoint for admins to update a seller's registered company/store name, location, or bio.
+    PUT /api/admin/sellers/<user_id>
+    """
+    def put(self, request, user_id):
+        is_ok, res = check_is_admin(request)
+        if not is_ok:
+            return res
+
+        data = request.data or {}
+        store_name = str(data.get("storeName", "")).strip()
+        campus_location = str(data.get("campusLocation", "")).strip()
+        bio = str(data.get("bio", "")).strip()
+
+        users_col = get_users_collection()
+        try:
+            target = users_col.find_one({"_id": ObjectId(user_id)})
+        except Exception:
+            return Response({"error": "Invalid user ID format."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not target:
+            return Response({"error": "User account not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        now = datetime.now(timezone.utc)
+        existing_profile = target.get("sellerProfile") or target.get("sellerDetails") or {}
+        updated_profile = dict(existing_profile)
+
+        if store_name:
+            updated_profile["storeName"] = store_name
+        if campus_location:
+            updated_profile["campusLocation"] = campus_location
+        if "bio" in data:
+            updated_profile["bio"] = bio
+        updated_profile["updatedAt"] = now.isoformat()
+
+        users_col.update_one(
+            {"_id": target["_id"]},
+            {
+                "$set": {
+                    "sellerProfile": updated_profile,
+                    "sellerDetails": updated_profile,
+                    "updatedAt": now,
+                }
+            },
+        )
+
+        if store_name or campus_location:
+            products_col = get_products_collection()
+            prod_update = {"updatedAt": now}
+            if store_name:
+                prod_update["sellerName"] = store_name
+            if campus_location:
+                prod_update["sellerLocation"] = campus_location
+            products_col.update_many({"sellerId": str(target["_id"])}, {"$set": prod_update})
+
+        refreshed = users_col.find_one({"_id": target["_id"]})
+        return Response(
+            {
+                "message": f"Seller details for {refreshed.get('name')} updated successfully.",
+                "user": serialize_user(refreshed),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+
 class AdminCategoriesView(APIView):
     """
     Endpoint for admins to list, add, and manage product categories.

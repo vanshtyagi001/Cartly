@@ -137,6 +137,32 @@ export function AuthProvider({ children }) {
     }
   };
 
+  const updateUserState = (newUser) => {
+    setUser(newUser);
+    localStorage.setItem('cartly_user', JSON.stringify(newUser));
+  };
+
+  const refreshUser = async () => {
+    const savedToken = localStorage.getItem('cartly_auth_token') || token;
+    if (!savedToken) return null;
+    try {
+      const response = await fetch(`${API_URL}/api/auth/me`, {
+        headers: {
+          Authorization: `Bearer ${savedToken}`,
+        },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setUser(data.user);
+        localStorage.setItem('cartly_user', JSON.stringify(data.user));
+        return data.user;
+      }
+    } catch (error) {
+      console.error('Failed to refresh user:', error);
+    }
+    return null;
+  };
+
   const logout = () => {
     setUser(null);
     setToken(null);
@@ -154,6 +180,8 @@ export function AuthProvider({ children }) {
         login,
         register,
         updateProfile,
+        updateUserState,
+        refreshUser,
         logout,
       }}
     >

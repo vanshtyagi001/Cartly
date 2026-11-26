@@ -50,6 +50,8 @@ export default function AdminPanel() {
   const [activeSellerActionUser, setActiveSellerActionUser] = useState(null);
   const [pendingActionType, setPendingActionType] = useState('');
   const [isProcessingSellerAction, setIsProcessingSellerAction] = useState(false);
+  const [editingSellerStore, setEditingSellerStore] = useState(null);
+  const [isSavingSellerStore, setIsSavingSellerStore] = useState(false);
   const [catalogViewMode, setCatalogViewMode] = useState('tiles'); // 'tiles' | 'table'
   const [catalogPage, setCatalogPage] = useState(1);
   const [catalogPageSize, setCatalogPageSize] = useState(8);
@@ -426,6 +428,43 @@ export default function AdminPanel() {
       fetchAdminData();
     } catch (err) {
       showNotice(err.message || 'Error deleting category.');
+    }
+  };
+
+  const handleAdminSaveSellerStore = async (e) => {
+    e.preventDefault();
+    if (!editingSellerStore || !editingSellerStore.storeName.trim()) {
+      showNotice('Company / Store name cannot be empty.');
+      return;
+    }
+
+    setIsSavingSellerStore(true);
+    try {
+      const res = await fetch(`${API_URL}/api/admin/sellers/${editingSellerStore.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          storeName: editingSellerStore.storeName.trim(),
+          campusLocation: editingSellerStore.campusLocation.trim(),
+          bio: editingSellerStore.bio.trim(),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to update seller company profile.');
+      }
+
+      showNotice(data.message || 'Seller company details updated.');
+      setEditingSellerStore(null);
+      fetchAdminData();
+    } catch (err) {
+      showNotice(err.message || 'Failed to update seller details.');
+    } finally {
+      setIsSavingSellerStore(false);
     }
   };
 
@@ -1800,6 +1839,93 @@ export default function AdminPanel() {
           </div>
         )}
 
+        {/* Modal to Edit Seller's Registered Company Name & Location */}
+        {editingSellerStore && (
+          <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+            <div className="bg-white border border-stone-200 p-6 sm:p-8 shadow-2xl max-w-lg w-full my-8 animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex items-center justify-between pb-4 mb-6 border-b border-stone-200">
+                <div>
+                  <span className="text-[10px] uppercase tracking-[0.25em] text-stone-400 font-semibold block mb-1">
+                    Seller Registration Details
+                  </span>
+                  <h2 className="text-xl sm:text-2xl font-serif text-stone-900 tracking-tight">
+                    Edit Registered Company Name
+                  </h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditingSellerStore(null)}
+                  className="text-stone-400 hover:text-stone-900 text-sm"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <p className="text-xs text-stone-500 mb-5">
+                Student Seller: <strong className="text-stone-900">{editingSellerStore.name}</strong>
+              </p>
+
+              <form onSubmit={handleAdminSaveSellerStore} className="space-y-4">
+                <div>
+                  <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
+                    Registered Company / Store Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={editingSellerStore.storeName}
+                    onChange={(e) => setEditingSellerStore(prev => ({ ...prev, storeName: e.target.value }))}
+                    placeholder="e.g., Vansh's Campus Depot"
+                    className="w-full bg-[#FAF9F6] border border-stone-200 px-3.5 py-2.5 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
+                    Campus Hub / Location
+                  </label>
+                  <input
+                    type="text"
+                    value={editingSellerStore.campusLocation}
+                    onChange={(e) => setEditingSellerStore(prev => ({ ...prev, campusLocation: e.target.value }))}
+                    placeholder="e.g., North Campus"
+                    className="w-full bg-[#FAF9F6] border border-stone-200 px-3.5 py-2.5 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
+                    Store Bio
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={editingSellerStore.bio}
+                    onChange={(e) => setEditingSellerStore(prev => ({ ...prev, bio: e.target.value }))}
+                    className="w-full bg-[#FAF9F6] border border-stone-200 px-3.5 py-2.5 text-stone-900 text-xs focus:border-stone-900 focus:bg-white focus:outline-none resize-none"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4 border-t border-stone-100">
+                  <button
+                    type="button"
+                    onClick={() => setEditingSellerStore(null)}
+                    className="px-5 py-2 text-xs uppercase tracking-widest text-stone-500 hover:text-stone-900 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingSellerStore}
+                    className="px-6 py-2.5 bg-stone-900 hover:bg-black text-white text-xs uppercase tracking-widest font-medium transition-colors disabled:opacity-50"
+                  >
+                    {isSavingSellerStore ? 'Saving...' : 'Save Company Name'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
         {/* TAB 4: USERS & SELLERS */}
         {activeTab === 'users' && (() => {
           const pendingCount = users.filter(u => (u.sellerStatus || '').toLowerCase() === 'pending').length;
@@ -2032,9 +2158,25 @@ export default function AdminPanel() {
                                   </>
                                 )}
 
-                                {/* Case 2: Approved Seller -> Suspend OR Cancel / Revoke */}
+                                {/* Case 2: Approved Seller -> Edit Store, Suspend OR Cancel / Revoke */}
                                 {rawStatus === 'approved' && (
                                   <>
+                                    <button
+                                      type="button"
+                                      disabled={isProcessingSellerAction}
+                                      onClick={() => {
+                                        setEditingSellerStore({
+                                          id: u.id,
+                                          name: u.name,
+                                          storeName: details.storeName || '',
+                                          campusLocation: details.campusLocation || '',
+                                          bio: details.bio || '',
+                                        });
+                                      }}
+                                      className="px-3 py-1.5 border border-stone-200 bg-stone-50 hover:bg-stone-100 text-stone-800 text-[10px] uppercase tracking-wider font-medium transition-colors"
+                                    >
+                                      Edit Store
+                                    </button>
                                     <button
                                       type="button"
                                       disabled={isProcessingSellerAction}

@@ -346,6 +346,47 @@ export default function Profile() {
 
         </form>
 
+        {/* Registered Campus Seller Company Section */}
+        {user?.isSeller && (
+          <section className="mt-10 bg-white border border-stone-200 p-8 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 mb-6 border-b border-stone-200">
+              <div>
+                <span className="text-[10px] uppercase tracking-[0.25em] font-medium text-stone-400 block mb-1">
+                  Campus Seller Account
+                </span>
+                <h2 className="font-serif text-2xl text-stone-900">
+                  Registered Company & Store Profile
+                </h2>
+              </div>
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] uppercase tracking-wider font-semibold self-start sm:self-auto">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                Verified Seller
+              </span>
+            </div>
+
+            <div className="p-5 bg-[#FAF9F6] border border-stone-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <span className="text-[9px] uppercase tracking-widest text-stone-400 font-semibold block mb-1">
+                  Registered Business Name
+                </span>
+                <p className="font-serif text-lg text-stone-900 font-medium">
+                  {user.sellerProfile?.storeName || user.sellerDetails?.storeName || `${user.name}'s Campus Depot`}
+                </p>
+                <p className="text-stone-500 text-xs mt-1">
+                  {user.sellerProfile?.campusLocation || user.sellerDetails?.campusLocation || 'North Campus'}
+                </p>
+              </div>
+              <Link
+                to="/seller"
+                state={{ tab: 'settings' }}
+                className="bg-stone-900 text-white text-xs uppercase tracking-[0.15em] font-medium py-3 px-6 hover:bg-black transition-colors text-center shrink-0"
+              >
+                Change Company Name →
+              </Link>
+            </div>
+          </section>
+        )}
+
       </div>
     </main>
   );

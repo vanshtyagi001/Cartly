@@ -7,6 +7,7 @@ from .views import (
     AdminOrdersView,
     AdminProductsView,
     AdminSellerStatusView,
+    AdminSellerUpdateView,
     AdminUsersView,
 )
 
@@ -22,5 +23,6 @@ urlpatterns = [
     path("categories/<str:category_name>", AdminCategoriesView.as_view(), name="admin-category-delete"),
     path("users", AdminUsersView.as_view(), name="admin-users"),
     path("users/<str:user_id>/toggle-admin", AdminUsersView.as_view(), name="admin-user-toggle"),
+    path("sellers/<str:user_id>", AdminSellerUpdateView.as_view(), name="admin-seller-update"),
     path("sellers/<str:user_id>/status", AdminSellerStatusView.as_view(), name="admin-seller-status"),
 ]

@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import ImageUploadInput from '../components/ImageUploadInput';
 
 export default function SellerStudio() {
-  const { user, token, isAuthenticated, updateProfile } = useAuth();
+  const { user, token, isAuthenticated, updateProfile, updateUserState, refreshUser } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
-  const [activeTab, setActiveTab] = useState('inventory'); // 'inventory' | 'orders' | 'settings'
+  const [activeTab, setActiveTab] = useState(location.state?.tab || 'inventory'); // 'inventory' | 'orders' | 'settings'
   const [stats, setStats] = useState({
     totalProducts: 0,
     totalOrders: 0,
@@ -24,6 +25,38 @@ export default function SellerStudio() {
     'Trekking Essentials',
   ]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Store Profile & Registered Company Name State
+  const initialSellerProfile = user?.sellerProfile || user?.sellerDetails || {};
+  const [storeProfileForm, setStoreProfileForm] = useState({
+    storeName: initialSellerProfile.storeName || (user?.name ? `${user.name.split(' ')[0]}'s Campus Depot` : ''),
+    campusLocation: initialSellerProfile.campusLocation || (user?.defaultAddress?.hostelBlock ? `${user.defaultAddress.hostelBlock}, Room ${user.defaultAddress.roomNumber}` : 'North Campus'),
+    phone: initialSellerProfile.phone || user?.phone || '',
+    bio: initialSellerProfile.bio || '',
+  });
+  const [isUpdatingStoreProfile, setIsUpdatingStoreProfile] = useState(false);
+  const [storeProfileSuccess, setStoreProfileSuccess] = useState('');
+  const [storeProfileError, setStoreProfileError] = useState('');
+
+  // Keep form synced if user state refreshes
+  useEffect(() => {
+    const prof = user?.sellerProfile || user?.sellerDetails;
+    if (prof) {
+      setStoreProfileForm({
+        storeName: prof.storeName || (user?.name ? `${user.name.split(' ')[0]}'s Campus Depot` : ''),
+        campusLocation: prof.campusLocation || 'North Campus',
+        phone: prof.phone || user?.phone || '',
+        bio: prof.bio || '',
+      });
+    }
+  }, [user]);
+
+  // Sync tab if user arrives with route state
+  useEffect(() => {
+    if (location.state?.tab) {
+      setActiveTab(location.state.tab);
+    }
+  }, [location.state]);
 
   // Onboarding state
   const [onboardForm, setOnboardForm] = useState({
@@ -269,6 +302,67 @@ export default function SellerStudio() {
       }
     } catch (err) {
       console.error('Status update error:', err);
+    }
+  };
+
+  // Update Registered Company / Store Profile
+  const handleUpdateStoreProfile = async (e) => {
+    e.preventDefault();
+    setStoreProfileError('');
+    setStoreProfileSuccess('');
+
+    const cleanStoreName = storeProfileForm.storeName.trim();
+    if (!cleanStoreName) {
+      setStoreProfileError('Registered Company / Store name is required.');
+      return;
+    }
+
+    setIsUpdatingStoreProfile(true);
+    try {
+      const res = await fetch(`${API_URL}/api/seller/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          storeName: cleanStoreName,
+          campusLocation: storeProfileForm.campusLocation.trim() || 'North Campus',
+          phone: storeProfileForm.phone.trim(),
+          bio: storeProfileForm.bio.trim(),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to update store company profile.');
+      }
+
+      if (data.user && updateUserState) {
+        updateUserState(data.user);
+      } else if (refreshUser) {
+        await refreshUser();
+      }
+
+      // Update local products in state with new sellerName and sellerLocation
+      setProducts(prev => prev.map(p => ({
+        ...p,
+        sellerName: cleanStoreName,
+        sellerLocation: storeProfileForm.campusLocation.trim() || p.sellerLocation,
+      })));
+
+      setStoreProfileSuccess(`Company name successfully updated to "${cleanStoreName}". All your active product listings now display this registered seller name!`);
+      setActionSuccess(`Registered company name updated to "${cleanStoreName}".`);
+      setTimeout(() => setStoreProfileSuccess(''), 6000);
+      setTimeout(() => setActionSuccess(''), 6000);
+
+      // Refresh seller dashboard data
+      loadSellerData();
+    } catch (err) {
+      console.error('Failed to update company name:', err);
+      setStoreProfileError(err.message || 'Failed to update company details.');
+    } finally {
+      setIsUpdatingStoreProfile(false);
     }
   };
 
@@ -592,9 +686,20 @@ export default function SellerStudio() {
         {/* Studio Header */}
         <div className="mb-10 pb-6 border-b border-stone-200 flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div>
-            <span className="text-[10px] uppercase tracking-[0.25em] font-medium text-stone-400 block mb-2">
-              Cartly Seller Hub
-            </span>
+            <div className="flex items-center gap-3 mb-2">
+              <span className="text-[10px] uppercase tracking-[0.25em] font-medium text-stone-400 block">
+                Cartly Seller Hub
+              </span>
+              <button
+                type="button"
+                onClick={() => setActiveTab('settings')}
+                className="text-[10px] uppercase tracking-wider font-semibold text-stone-500 hover:text-stone-900 underline flex items-center gap-1 transition-colors"
+                title="Change registered company/store name"
+              >
+                <span>Edit Company Name</span>
+                <span>→</span>
+              </button>
+            </div>
             <h1 className="text-3xl md:text-5xl font-serif text-stone-900 tracking-tight">
               {sellerProfile.storeName || "Your Campus Store"}
             </h1>
@@ -666,10 +771,10 @@ export default function SellerStudio() {
         </div>
 
         {/* Navigation Tabs */}
-        <div className="flex border-b border-stone-200 mb-8 space-x-8">
+        <div className="flex border-b border-stone-200 mb-8 space-x-8 overflow-x-auto">
           <button
             onClick={() => setActiveTab('inventory')}
-            className={`pb-4 text-xs uppercase tracking-widest font-medium transition-colors relative ${
+            className={`pb-4 text-xs uppercase tracking-widest font-medium transition-colors whitespace-nowrap relative ${
               activeTab === 'inventory' ? 'text-stone-900 font-semibold' : 'text-stone-400 hover:text-stone-600'
             }`}
           >
@@ -681,12 +786,24 @@ export default function SellerStudio() {
 
           <button
             onClick={() => setActiveTab('orders')}
-            className={`pb-4 text-xs uppercase tracking-widest font-medium transition-colors relative ${
+            className={`pb-4 text-xs uppercase tracking-widest font-medium transition-colors whitespace-nowrap relative ${
               activeTab === 'orders' ? 'text-stone-900 font-semibold' : 'text-stone-400 hover:text-stone-600'
             }`}
           >
             Orders to Fulfill ({orders.length})
             {activeTab === 'orders' && (
+              <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-stone-900" />
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab('settings')}
+            className={`pb-4 text-xs uppercase tracking-widest font-medium transition-colors whitespace-nowrap relative ${
+              activeTab === 'settings' ? 'text-stone-900 font-semibold' : 'text-stone-400 hover:text-stone-600'
+            }`}
+          >
+            Store Profile & Company Name
+            {activeTab === 'settings' && (
               <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-stone-900" />
             )}
           </button>
@@ -1118,6 +1235,206 @@ export default function SellerStudio() {
                 </div>
               ))
             )}
+          </div>
+        )}
+
+        {/* TAB 3: STORE PROFILE & REGISTERED COMPANY NAME */}
+        {activeTab === 'settings' && (
+          <div className="space-y-8">
+            <div className="bg-white border border-stone-200 p-8 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-6 mb-8 border-b border-stone-200 gap-4">
+                <div>
+                  <span className="text-[10px] uppercase tracking-[0.25em] font-medium text-stone-400 block mb-1">
+                    Seller Identity & Branding
+                  </span>
+                  <h2 className="font-serif text-2xl md:text-3xl text-stone-900 tracking-tight">
+                    Registered Company & Store Name
+                  </h2>
+                  <p className="text-stone-500 text-xs mt-1 max-w-xl leading-relaxed">
+                    Update the official name of which your campus business or stall is registered. Any changes automatically update across your store badge, product detail pages, and buyer recommendations.
+                  </p>
+                </div>
+                <div className="shrink-0">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] uppercase tracking-wider font-semibold">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                    Verified Seller Account
+                  </span>
+                </div>
+              </div>
+
+              {/* Feedback Banners */}
+              {storeProfileSuccess && (
+                <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-3">
+                  <svg className="w-5 h-5 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span>{storeProfileSuccess}</span>
+                </div>
+              )}
+
+              {storeProfileError && (
+                <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-800 text-xs flex items-center gap-3">
+                  <svg className="w-5 h-5 text-red-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>{storeProfileError}</span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+                {/* Form column */}
+                <div className="lg:col-span-7">
+                  <form onSubmit={handleUpdateStoreProfile} className="space-y-6">
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-2">
+                        Registered Company / Store Name *
+                      </label>
+                      <input
+                        type="text"
+                        value={storeProfileForm.storeName}
+                        onChange={(e) => {
+                          setStoreProfileForm(prev => ({ ...prev, storeName: e.target.value }));
+                          if (storeProfileError) setStoreProfileError('');
+                        }}
+                        placeholder="e.g., Vansh's Campus Depot, North Hub Books"
+                        className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-3 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none transition-colors"
+                        required
+                      />
+                      <p className="text-[11px] text-stone-400 mt-1.5 leading-relaxed">
+                        This is the official business name displayed to students on your items, cards, and invoices.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-2">
+                        Campus Hub / Stall Location *
+                      </label>
+                      <input
+                        type="text"
+                        value={storeProfileForm.campusLocation}
+                        onChange={(e) => {
+                          setStoreProfileForm(prev => ({ ...prev, campusLocation: e.target.value }));
+                          if (storeProfileError) setStoreProfileError('');
+                        }}
+                        placeholder="e.g., North Campus, Hall 4 Room 204, Central Canteen"
+                        className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-3 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none transition-colors"
+                        required
+                      />
+                      <p className="text-[11px] text-stone-400 mt-1.5 leading-relaxed">
+                        Where student orders are fulfilled or dispatched from on campus.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-2">
+                        Contact Phone / WhatsApp
+                      </label>
+                      <input
+                        type="tel"
+                        value={storeProfileForm.phone}
+                        onChange={(e) => setStoreProfileForm(prev => ({ ...prev, phone: e.target.value }))}
+                        placeholder="+91 98765 43210"
+                        className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-3 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none transition-colors"
+                      />
+                      <p className="text-[11px] text-stone-400 mt-1.5 leading-relaxed">
+                        Used by campus admins and buyers for urgent delivery or pickup coordination.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-2">
+                        Store Bio / Description
+                      </label>
+                      <textarea
+                        rows={3}
+                        value={storeProfileForm.bio}
+                        onChange={(e) => setStoreProfileForm(prev => ({ ...prev, bio: e.target.value }))}
+                        placeholder="Student-run campus outlet providing verified electronics, books, and hostel necessities."
+                        className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-3 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none transition-colors resize-none"
+                      />
+                      <p className="text-[11px] text-stone-400 mt-1.5 leading-relaxed">
+                        Brief summary of what your business specializes in.
+                      </p>
+                    </div>
+
+                    <div className="pt-4 border-t border-stone-200 flex flex-col sm:flex-row items-center justify-between gap-4">
+                      <p className="text-[11px] text-stone-400">
+                        Updates apply instantly to all your active listings.
+                      </p>
+                      <button
+                        type="submit"
+                        disabled={isUpdatingStoreProfile}
+                        className="w-full sm:w-auto bg-stone-900 text-white text-xs uppercase tracking-[0.15em] font-medium py-3.5 px-8 hover:bg-black transition-colors disabled:opacity-50 flex items-center justify-center gap-2 shrink-0"
+                      >
+                        {isUpdatingStoreProfile ? (
+                          <>
+                            <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                            <span>Saving Changes...</span>
+                          </>
+                        ) : (
+                          <span>Update Company Name</span>
+                        )}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+
+                {/* Live Preview column */}
+                <div className="lg:col-span-5">
+                  <div className="bg-[#FAF9F6] border border-stone-200 p-6 shadow-sm sticky top-28">
+                    <div className="flex items-center justify-between pb-3 mb-4 border-b border-stone-200">
+                      <span className="text-[9px] uppercase tracking-[0.2em] font-semibold text-stone-400 block">
+                        Buyer Preview
+                      </span>
+                      <span className="text-[10px] text-stone-400 font-mono">
+                        /product/:id
+                      </span>
+                    </div>
+
+                    <p className="text-stone-500 text-xs mb-4 leading-relaxed">
+                      This is the exact campus seller card buyers see when browsing your listings:
+                    </p>
+
+                    {/* Exact Campus Seller Card from Product.jsx */}
+                    <div className="p-5 bg-white border border-stone-200 shadow-sm">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[9px] uppercase tracking-widest text-stone-400 font-semibold block">
+                          Campus Seller
+                        </span>
+                        <span className="text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200">
+                          25 in stock
+                        </span>
+                      </div>
+                      <div>
+                        <p className="font-serif text-stone-900 text-base font-medium">
+                          {storeProfileForm.storeName.trim() || "Your Company Name"}
+                        </p>
+                        <p className="text-stone-500 text-xs mt-1">
+                          {storeProfileForm.campusLocation.trim() || "North Campus"}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-6 pt-4 border-t border-stone-200 text-[11px] text-stone-500 space-y-2">
+                      <div className="flex items-start gap-2">
+                        <span className="text-stone-900 font-medium">✓</span>
+                        <span>Catalog listings automatically synchronize</span>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <span className="text-stone-900 font-medium">✓</span>
+                        <span>Official company name registered under your student ID</span>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <span className="text-stone-900 font-medium">✓</span>
+                        <span>Visible in cart checkout and order receipts</span>
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+              </div>
+
+            </div>
           </div>
         )}
 
