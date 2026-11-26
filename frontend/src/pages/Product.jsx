@@ -27,7 +27,8 @@ export default function Product() {
     distribution: { '5': 0, '4': 0, '3': 0, '2': 0, '1': 0 },
     reviews: [],
   });
-  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewRating, setReviewRating] = useState(0);
+  const [hoverRating, setHoverRating] = useState(0);
   const [reviewComment, setReviewComment] = useState('');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [reviewFeedback, setReviewFeedback] = useState('');
@@ -42,6 +43,8 @@ export default function Product() {
     setQuantity(1);
     setSelectedImageIndex(0);
     setNotifySubmitted(false);
+    setReviewRating(0);
+    setHoverRating(0);
     setReviewFeedback('');
     setReviewError('');
     if (user?.email) setNotifyEmail(user.email);
@@ -82,6 +85,10 @@ export default function Product() {
     e.preventDefault();
     setReviewError('');
     setReviewFeedback('');
+    if (reviewRating < 1 || reviewRating > 5) {
+      setReviewError('Please select a star rating before publishing.');
+      return;
+    }
     if (!reviewComment.trim()) {
       setReviewError('Please write a brief review comment.');
       return;
@@ -113,6 +120,8 @@ export default function Product() {
         reviews: Array.isArray(data.reviews) ? data.reviews : [],
       });
       setReviewComment('');
+      setReviewRating(0);
+      setHoverRating(0);
       setReviewFeedback(data.message || 'Your review has been published.');
     } catch (err) {
       setReviewError(err.message || 'Could not submit review.');
@@ -482,25 +491,42 @@ export default function Product() {
               ) : (
                 <form onSubmit={handleReviewSubmit} className="space-y-4">
                   <div>
-                    <span className="block text-[10px] uppercase tracking-widest text-stone-500 mb-2">
-                      Your Rating
-                    </span>
-                    <div className="flex items-center gap-1.5">
-                      {[1, 2, 3, 4, 5].map((star) => (
-                        <button
-                          key={star}
-                          type="button"
-                          onClick={() => setReviewRating(star)}
-                          className={`w-9 h-9 border text-sm transition-colors ${
-                            star <= reviewRating
-                              ? 'bg-stone-900 text-white border-stone-900'
-                              : 'bg-white text-stone-400 border-stone-200 hover:border-stone-400'
-                          }`}
-                          aria-label={`Rate ${star} stars`}
-                        >
-                          ★
-                        </button>
-                      ))}
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="block text-[10px] uppercase tracking-widest text-stone-500">
+                        Your Rating
+                      </span>
+                      {reviewRating > 0 && (
+                        <span className="text-[10px] font-mono text-stone-700">
+                          {reviewRating} / 5
+                        </span>
+                      )}
+                    </div>
+                    <div
+                      className="flex items-center gap-1.5"
+                      onMouseLeave={() => setHoverRating(0)}
+                    >
+                      {[1, 2, 3, 4, 5].map((star) => {
+                        const isFilled = star <= (hoverRating || reviewRating);
+                        return (
+                          <button
+                            key={star}
+                            type="button"
+                            onMouseEnter={() => setHoverRating(star)}
+                            onClick={() => {
+                              setReviewRating(star);
+                              if (reviewError) setReviewError('');
+                            }}
+                            className={`w-9 h-9 border text-sm transition-colors cursor-pointer ${
+                              isFilled
+                                ? 'bg-stone-900 text-amber-400 border-stone-900'
+                                : 'bg-white text-stone-300 border-stone-200 hover:border-stone-400'
+                            }`}
+                            aria-label={`Rate ${star} stars`}
+                          >
+                            ★
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
 
