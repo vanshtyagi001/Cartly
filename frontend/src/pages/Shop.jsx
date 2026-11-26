@@ -36,6 +36,7 @@ export default function Shop() {
   // Read current states from the URL, defaulting to Name: A to Z
   const activeCategory = searchParams.get("category") || "All Products";
   const activeSort = searchParams.get("sort") || "name-asc";
+  const searchQuery = searchParams.get("search") || "";
 
   const sortOptions = [
     { id: 'name-asc', label: 'Name: A to Z' },
@@ -44,10 +45,19 @@ export default function Shop() {
     { id: 'price-desc', label: 'Price: High to Low' }
   ];
 
-  // 1. Filter by Category
-  let displayedProducts = activeCategory === "All Products" 
-    ? [...products] 
-    : products.filter(product => product.category === activeCategory);
+  // 1. Filter by Category & Search Query
+  let displayedProducts = products.filter(product => {
+    const matchesCategory = activeCategory === "All Products" || product.category === activeCategory;
+    if (!matchesCategory) return false;
+
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase().trim();
+    const nameMatch = product.name?.toLowerCase().includes(q);
+    const descMatch = product.description?.toLowerCase().includes(q);
+    const sellerMatch = product.sellerName?.toLowerCase().includes(q);
+    const catMatch = product.category?.toLowerCase().includes(q);
+    return Boolean(nameMatch || descMatch || sellerMatch || catMatch);
+  });
 
   // 2. Sort the Filtered Products
   displayedProducts.sort((a, b) => {
@@ -87,6 +97,23 @@ export default function Shop() {
     }
     setSearchParams(newParams);
     setIsSortOpen(false);
+  };
+
+  const handleSearchChange = (e) => {
+    const val = e.target.value;
+    const newParams = new URLSearchParams(searchParams);
+    if (!val.trim()) {
+      newParams.delete("search");
+    } else {
+      newParams.set("search", val);
+    }
+    setSearchParams(newParams, { replace: true });
+  };
+
+  const handleClearSearch = () => {
+    const newParams = new URLSearchParams(searchParams);
+    newParams.delete("search");
+    setSearchParams(newParams, { replace: true });
   };
 
   // Close the sort dropdown if the user clicks outside of it
@@ -134,18 +161,44 @@ export default function Shop() {
         <section className="flex-1 flex flex-col min-w-0 md:pl-12 pt-12 md:pt-16 pb-24">
           
           {/* Top Header / Filters - Structural Horizontal Axis */}
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-12 pb-5 border-b border-stone-200 gap-4">
-            <div className="text-stone-500 font-sans text-xs tracking-wide">
-              Showing {displayedProducts.length} {displayedProducts.length === 1 ? 'Product' : 'Products'}
-            </div>
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-10 pb-5 border-b border-stone-200 gap-5">
             
-            <div className="flex items-center space-x-8">
-              <button className="text-[10px] uppercase tracking-widest font-medium text-stone-500 hover:text-stone-900 flex items-center gap-2 transition-colors">
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+            {/* Search Input Box */}
+            <div className="relative w-full sm:w-80 md:w-96">
+              <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-stone-400">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
-                Filter
-              </button>
+              </span>
+              <input 
+                type="text"
+                value={searchQuery}
+                onChange={handleSearchChange}
+                placeholder="Search campus essentials, gear, sellers..."
+                className="w-full bg-[#FAF9F6] border border-stone-200 pl-9 pr-8 py-2 text-xs text-stone-900 placeholder:text-stone-400 font-sans focus:outline-none focus:border-stone-900 focus:bg-white transition-colors"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={handleClearSearch}
+                  className="absolute inset-y-0 right-0 flex items-center pr-3 text-stone-400 hover:text-stone-900 text-xs transition-colors"
+                  title="Clear search"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {/* Right Controls: Item Count & Sort Dropdown */}
+            <div className="flex items-center justify-between lg:justify-end gap-6 sm:gap-8">
+              <div className="text-stone-500 font-sans text-xs tracking-wide">
+                Showing {displayedProducts.length} {displayedProducts.length === 1 ? 'Product' : 'Products'}
+                {searchQuery && (
+                  <span className="text-stone-400 text-[11px] ml-1">
+                    for "<span className="text-stone-700 font-medium">{searchQuery}</span>"
+                  </span>
+                )}
+              </div>
               
               {/* Custom Sort Dropdown */}
               <div className="relative" ref={sortDropdownRef}>
@@ -233,9 +286,18 @@ export default function Shop() {
               
               {displayedProducts.length === 0 && (
                 <div className="col-span-full py-32 text-center">
-                  <span className="text-stone-400 font-serif italic text-xl">
+                  <span className="text-stone-400 font-serif italic text-xl block mb-3">
                     No products found matching your criteria.
                   </span>
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={handleClearSearch}
+                      className="text-[10px] uppercase tracking-widest text-stone-900 border-b border-stone-900 pb-0.5 hover:text-stone-500 hover:border-stone-500 transition-colors"
+                    >
+                      Clear search "{searchQuery}"
+                    </button>
+                  )}
                 </div>
               )}
             </div>
