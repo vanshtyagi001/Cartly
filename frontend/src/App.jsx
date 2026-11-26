@@ -2,6 +2,7 @@ import React, { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
+import { WishlistProvider } from './context/WishlistContext';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import Home from './pages/Home';
@@ -17,6 +18,8 @@ const SellerStudio = lazy(() => import('./pages/SellerStudio'));
 const AdminPanel = lazy(() => import('./pages/AdminPanel'));
 const About = lazy(() => import('./pages/About'));
 const Support = lazy(() => import('./pages/Support'));
+const Store = lazy(() => import('./pages/Store'));
+const Wishlist = lazy(() => import('./pages/Wishlist'));
 
 function RouteLoader() {
   return (
@@ -30,8 +33,9 @@ function RouteLoader() {
 export default function App() {
   return (
     <AuthProvider>
-      <CartProvider>
-        <Router>
+      <WishlistProvider>
+        <CartProvider>
+          <Router>
           <div className="min-h-screen w-full flex flex-col bg-white relative">
             <Navbar />
             
@@ -45,6 +49,8 @@ export default function App() {
                 <Route path="/login" element={<Login />} />
                 <Route path="/profile" element={<Profile />} />
                 <Route path="/seller" element={<SellerStudio />} />
+                <Route path="/store/:sellerId" element={<Store />} />
+                <Route path="/wishlist" element={<Wishlist />} />
                 <Route path="/admin" element={<AdminPanel />} />
                 <Route path="/about" element={<About />} />
                 <Route path="/contact" element={<Support defaultSection="contact" />} />
@@ -61,6 +67,7 @@ export default function App() {
           </div>
         </Router>
       </CartProvider>
+      </WishlistProvider>
     </AuthProvider>
   );
 }

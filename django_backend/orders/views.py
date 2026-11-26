@@ -220,3 +220,93 @@ class OrderDetailView(APIView):
         if not doc:
             return Response({"error": "Order not found."}, status=status.HTTP_404_NOT_FOUND)
         return Response(format_order(doc), status=status.HTTP_200_OK)
+
+
+class OrderCancelView(APIView):
+    def post(self, request, order_id):
+        user = get_user_from_request(request)
+        if not user:
+            return Response(
+                {"error": "Please sign in to cancel an order."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        orders_col = get_orders_collection()
+        doc = orders_col.find_one({"orderId": order_id})
+        if not doc and ObjectId.is_valid(order_id):
+            doc = orders_col.find_one({"_id": ObjectId(order_id)})
+
+        if not doc:
+            return Response({"error": "Order not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        user_id = str(user["_id"])
+        user_email = str(user.get("email", "")).lower()
+        owns_order = (
+            doc.get("userId") == user_id
+            or (user_email and str(doc.get("userEmail", "")).lower() == user_email)
+        )
+        if not owns_order:
+            return Response(
+                {"error": "You are not authorized to cancel this order."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        current_status = doc.get("status", "Confirmed")
+        if current_status != "Confirmed":
+            return Response(
+                {"error": f"Order cannot be cancelled once it is '{current_status}'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        now = datetime.now(timezone.utc)
+        orders_col.update_one(
+            {"_id": doc["_id"]},
+            {
+                "$set": {
+                    "status": "Cancelled",
+                    "cancelledBy": "buyer",
+                    "cancelledAt": now,
+                    "updatedAt": now,
+                }
+            },
+        )
+
+        # Restore product stock for every cancelled item
+        products_col = get_products_collection()
+        for it in doc.get("items", []):
+            raw_id = it.get("id")
+            qty = int(it.get("quantity", 1) or 1)
+            prod_query = {}
+            if isinstance(raw_id, int) or (isinstance(raw_id, str) and str(raw_id).isdigit()):
+                prod_query = {"productId": int(raw_id)}
+            elif ObjectId.is_valid(str(raw_id)):
+                prod_query = {"_id": ObjectId(str(raw_id))}
+
+            if prod_query:
+                p = products_col.find_one(prod_query)
+                if p:
+                    curr = p.get("stock", 0)
+                    try:
+                        curr = int(curr)
+                    except (ValueError, TypeError):
+                        curr = 0
+                    new_stock = max(0, curr + qty)
+                    products_col.update_one(
+                        {"_id": p["_id"]},
+                        {
+                            "$set": {
+                                "stock": new_stock,
+                                "inStock": new_stock > 0,
+                                "updatedAt": now,
+                            }
+                        },
+                    )
+
+        updated_doc = orders_col.find_one({"_id": doc["_id"]})
+        return Response(
+            {
+                "message": f"Order #{doc.get('orderId', order_id)} has been cancelled and stock restored.",
+                "order": format_order(updated_doc),
+            },
+            status=status.HTTP_200_OK,
+        )

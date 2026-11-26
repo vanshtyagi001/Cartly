@@ -5,8 +5,10 @@ from pymongo.errors import DuplicateKeyError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .repository import get_categories_collection, get_collection
+from .repository import get_categories_collection, get_collection, get_reviews_collection
 from .serializers import format_product, json_safe, validate_product_payload
+from accounts.auth import get_user_from_request
+from orders.repository import get_orders_collection
 
 
 DEFAULT_CATEGORIES = [
@@ -166,3 +168,93 @@ class ProductDetailView(APIView):
                 {"message": "Server Error", "error": str(error)},
                 status=500,
             )
+
+
+def _build_reviews_summary(product_id):
+    reviews_col = get_reviews_collection()
+    docs = list(reviews_col.find({"productId": product_id}).sort("updatedAt", -1))
+    total = len(docs)
+    distribution = {"5": 0, "4": 0, "3": 0, "2": 0, "1": 0}
+    rating_sum = 0
+    formatted = []
+
+    for d in docs:
+        r = int(d.get("rating", 5))
+        r = max(1, min(5, r))
+        rating_sum += r
+        distribution[str(r)] += 1
+        created = d.get("updatedAt") or d.get("createdAt")
+        date_str = created.strftime("%b %d, %Y") if isinstance(created, datetime) else str(created or "")
+        formatted.append({
+            "id": str(d["_id"]),
+            "userId": d.get("userId", ""),
+            "userName": d.get("userName", "Campus Student"),
+            "rating": r,
+            "comment": d.get("comment", ""),
+            "verifiedPurchase": bool(d.get("verifiedPurchase", False)),
+            "date": date_str,
+        })
+
+    avg = round(rating_sum / total, 1) if total > 0 else 0.0
+    return {
+        "averageRating": avg,
+        "totalReviews": total,
+        "distribution": distribution,
+        "reviews": formatted,
+    }
+
+
+class ProductReviewsView(APIView):
+    def get(self, request, product_id):
+        try:
+            return Response(_build_reviews_summary(product_id))
+        except Exception as error:
+            return Response({"error": str(error)}, status=500)
+
+    def post(self, request, product_id):
+        user = get_user_from_request(request)
+        if not user:
+            return Response({"error": "Please sign in to leave a review."}, status=401)
+
+        data = request.data or {}
+        try:
+            rating = int(data.get("rating", 0))
+        except (ValueError, TypeError):
+            rating = 0
+
+        comment = str(data.get("comment", "")).strip()
+        if rating < 1 or rating > 5:
+            return Response({"error": "Please select a star rating between 1 and 5."}, status=400)
+        if not comment:
+            return Response({"error": "Please write a brief review comment."}, status=400)
+
+        user_id = str(user["_id"])
+        orders_col = get_orders_collection()
+        has_ordered = orders_col.find_one({
+            "userId": user_id,
+            "status": {"$ne": "Cancelled"},
+            "items.id": product_id,
+        })
+
+        now = datetime.now(timezone.utc)
+        reviews_col = get_reviews_collection()
+        reviews_col.update_one(
+            {"productId": product_id, "userId": user_id},
+            {
+                "$set": {
+                    "productId": product_id,
+                    "userId": user_id,
+                    "userName": user.get("name", "Campus Student"),
+                    "rating": rating,
+                    "comment": comment,
+                    "verifiedPurchase": bool(has_ordered),
+                    "updatedAt": now,
+                },
+                "$setOnInsert": {"createdAt": now},
+            },
+            upsert=True,
+        )
+
+        summary = _build_reviews_summary(product_id)
+        summary["message"] = "Thank you! Your review has been published."
+        return Response(summary, status=201)

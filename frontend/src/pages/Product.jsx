@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
+import { useWishlist } from '../context/WishlistContext';
 
 export default function Product() {
   const { id } = useParams(); 
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, token, isAuthenticated } = useAuth();
   const [quantity, setQuantity] = useState(1);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [showToast, setShowToast] = useState(false);
@@ -18,29 +19,55 @@ export default function Product() {
   const [product, setProduct] = useState(null);
   const [suggestions, setSuggestions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Reviews & Ratings state
+  const [reviewSummary, setReviewSummary] = useState({
+    averageRating: 0,
+    totalReviews: 0,
+    distribution: { '5': 0, '4': 0, '3': 0, '2': 0, '1': 0 },
+    reviews: [],
+  });
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState('');
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [reviewFeedback, setReviewFeedback] = useState('');
+  const [reviewError, setReviewError] = useState('');
   
   const { addToCart } = useCart(); 
+  const { isWishlisted, toggleWishlist } = useWishlist();
 
-  // Fetch single product and contextual suggestions from backend
+  // Fetch single product, reviews, and contextual suggestions from backend
   useEffect(() => {
     setIsLoading(true);
     setQuantity(1);
     setSelectedImageIndex(0);
     setNotifySubmitted(false);
+    setReviewFeedback('');
+    setReviewError('');
     if (user?.email) setNotifyEmail(user.email);
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
     const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-    fetch(`${apiUrl}/api/products/${id}`)
-      .then(async (res) => {
-        if (!res.ok) {
-          throw new Error('Product not found');
-        }
+    Promise.all([
+      fetch(`${apiUrl}/api/products/${id}`).then(async (res) => {
+        if (!res.ok) throw new Error('Product not found');
         return res.json();
-      })
-      .then((data) => {
+      }),
+      fetch(`${apiUrl}/api/products/${id}/reviews`)
+        .then((res) => (res.ok ? res.json() : null))
+        .catch(() => null),
+    ])
+      .then(([data, revData]) => {
         setProduct(data?.product || null);
         setSuggestions(Array.isArray(data?.suggestions) ? data.suggestions : []);
+        if (revData) {
+          setReviewSummary({
+            averageRating: revData.averageRating || 0,
+            totalReviews: revData.totalReviews || 0,
+            distribution: revData.distribution || { '5': 0, '4': 0, '3': 0, '2': 0, '1': 0 },
+            reviews: Array.isArray(revData.reviews) ? revData.reviews : [],
+          });
+        }
         setIsLoading(false);
       })
       .catch((error) => {
@@ -50,6 +77,49 @@ export default function Product() {
         setIsLoading(false);
       });
   }, [id]);
+
+  const handleReviewSubmit = async (e) => {
+    e.preventDefault();
+    setReviewError('');
+    setReviewFeedback('');
+    if (!reviewComment.trim()) {
+      setReviewError('Please write a brief review comment.');
+      return;
+    }
+
+    setIsSubmittingReview(true);
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    try {
+      const res = await fetch(`${apiUrl}/api/products/${id}/reviews`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          rating: reviewRating,
+          comment: reviewComment.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to publish review.');
+      }
+
+      setReviewSummary({
+        averageRating: data.averageRating || 0,
+        totalReviews: data.totalReviews || 0,
+        distribution: data.distribution || { '5': 0, '4': 0, '3': 0, '2': 0, '1': 0 },
+        reviews: Array.isArray(data.reviews) ? data.reviews : [],
+      });
+      setReviewComment('');
+      setReviewFeedback(data.message || 'Your review has been published.');
+    } catch (err) {
+      setReviewError(err.message || 'Could not submit review.');
+    } finally {
+      setIsSubmittingReview(false);
+    }
+  };
 
   // Lock body scroll when lightbox is open
   useEffect(() => {
@@ -158,15 +228,49 @@ export default function Product() {
 
           {/* Right Column: Product Information */}
           <div className="w-full lg:w-1/2 flex flex-col pt-4 lg:pt-8">
-            <span className="text-[10px] font-medium text-stone-500 tracking-[0.2em] uppercase mb-4 block">
-              {product.category}
-            </span>
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-serif text-stone-900 mb-6 tracking-tighter leading-none">
+            <div className="flex items-center justify-between gap-4 mb-4">
+              <span className="text-[10px] font-medium text-stone-500 tracking-[0.2em] uppercase">
+                {product.category}
+              </span>
+              <button
+                type="button"
+                onClick={() => toggleWishlist(product.id)}
+                className={`inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.15em] font-medium px-3 py-1.5 border transition-colors ${
+                  isWishlisted(product.id)
+                    ? 'bg-stone-900 text-white border-stone-900'
+                    : 'bg-white text-stone-600 border-stone-200 hover:border-stone-900 hover:text-stone-900'
+                }`}
+                aria-label={isWishlisted(product.id) ? 'Remove from wishlist' : 'Save to wishlist'}
+              >
+                <svg
+                  className="w-3.5 h-3.5"
+                  fill={isWishlisted(product.id) ? 'currentColor' : 'none'}
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={1.75}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                </svg>
+                <span>{isWishlisted(product.id) ? 'Saved' : 'Save'}</span>
+              </button>
+            </div>
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-serif text-stone-900 mb-4 tracking-tighter leading-none">
               {product.name}
             </h1>
-            <span className="text-2xl font-sans text-stone-900 mb-10 block">
-              {product.price}
-            </span>
+            <div className="flex items-center gap-4 mb-8">
+              <span className="text-2xl font-sans text-stone-900">
+                {product.price}
+              </span>
+              {reviewSummary.totalReviews > 0 && (
+                <a
+                  href="#reviews"
+                  className="text-xs text-stone-500 hover:text-stone-900 border-l border-stone-200 pl-4 transition-colors"
+                >
+                  <span className="text-stone-900 font-medium">{reviewSummary.averageRating.toFixed(1)} ★</span>
+                  <span className="ml-1.5">({reviewSummary.totalReviews} {reviewSummary.totalReviews === 1 ? 'review' : 'reviews'})</span>
+                </a>
+              )}
+            </div>
             
             <p className="text-stone-500 mb-8 leading-relaxed text-sm font-sans max-w-md">
               {product.description || "High-quality, durable campus essential designed to make your daily routine smoother. Built for students, curated by Cartly to ensure form seamlessly meets function."}
@@ -189,9 +293,19 @@ export default function Product() {
                 </span>
               </div>
               <div>
-                <p className="font-serif text-stone-900 text-base font-medium">
-                  {product.sellerName || "Cartly Campus Hub"}
-                </p>
+                {product.sellerId ? (
+                  <Link
+                    to={`/store/${product.sellerId}`}
+                    className="font-serif text-stone-900 text-base font-medium hover:underline inline-flex items-center gap-1.5 group"
+                  >
+                    <span>{product.sellerName || "Cartly Campus Hub"}</span>
+                    <span className="text-xs text-stone-400 group-hover:text-stone-900 transition-colors">→</span>
+                  </Link>
+                ) : (
+                  <p className="font-serif text-stone-900 text-base font-medium">
+                    {product.sellerName || "Cartly Campus Hub"}
+                  </p>
+                )}
                 <p className="text-stone-500 text-xs mt-1">
                   {product.sellerLocation || "Central Campus Depot"}
                 </p>
@@ -302,6 +416,173 @@ export default function Product() {
           
         </main>
       </div>
+
+      {/* Student Reviews & Ratings Section */}
+      <section id="reviews" className="w-full bg-white border-t border-stone-200 py-16 lg:py-20">
+        <div className="max-w-[1400px] mx-auto px-8 md:px-12 grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-start">
+          {/* Left Column: Summary & Review Form */}
+          <div className="lg:col-span-4 space-y-8">
+            <div>
+              <span className="text-[10px] uppercase tracking-[0.25em] text-stone-400 font-medium block mb-1">
+                Student Feedback
+              </span>
+              <h2 className="text-2xl sm:text-3xl font-serif text-stone-900 tracking-tight">
+                Reviews &amp; Ratings
+              </h2>
+            </div>
+
+            {reviewSummary.totalReviews > 0 && (
+              <div className="p-6 bg-[#FAF9F6] border border-stone-200 space-y-5">
+                <div className="flex items-baseline gap-3">
+                  <span className="font-serif text-4xl text-stone-900">
+                    {reviewSummary.averageRating.toFixed(1)}
+                  </span>
+                  <span className="text-xs text-stone-500 uppercase tracking-widest">
+                    out of 5.0 · {reviewSummary.totalReviews} {reviewSummary.totalReviews === 1 ? 'review' : 'reviews'}
+                  </span>
+                </div>
+
+                <div className="space-y-2">
+                  {['5', '4', '3', '2', '1'].map((star) => {
+                    const count = reviewSummary.distribution?.[star] || 0;
+                    const pct = reviewSummary.totalReviews > 0 ? Math.round((count / reviewSummary.totalReviews) * 100) : 0;
+                    return (
+                      <div key={star} className="flex items-center gap-3 text-[11px] text-stone-600">
+                        <span className="w-7 font-mono">{star}★</span>
+                        <div className="flex-1 h-1.5 bg-stone-200 overflow-hidden">
+                          <div className="h-full bg-stone-900 transition-all duration-500" style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className="w-6 text-right text-stone-400 font-mono">{count}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Write a Review Card */}
+            <div className="p-6 bg-[#FAF9F6] border border-stone-200">
+              <span className="text-[10px] uppercase tracking-[0.2em] font-semibold text-stone-700 block mb-4">
+                Write a Review
+              </span>
+
+              {!isAuthenticated ? (
+                <div className="space-y-4">
+                  <p className="text-xs text-stone-500 leading-relaxed">
+                    Sign in with your campus account to share your experience with this item.
+                  </p>
+                  <Link
+                    to="/login"
+                    state={{ from: { pathname: `/product/${id}` } }}
+                    className="inline-block w-full text-center bg-stone-900 text-white text-[10px] uppercase tracking-[0.2em] font-medium py-3.5 hover:bg-black transition-colors"
+                  >
+                    Sign In to Review
+                  </Link>
+                </div>
+              ) : (
+                <form onSubmit={handleReviewSubmit} className="space-y-4">
+                  <div>
+                    <span className="block text-[10px] uppercase tracking-widest text-stone-500 mb-2">
+                      Your Rating
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <button
+                          key={star}
+                          type="button"
+                          onClick={() => setReviewRating(star)}
+                          className={`w-9 h-9 border text-sm transition-colors ${
+                            star <= reviewRating
+                              ? 'bg-stone-900 text-white border-stone-900'
+                              : 'bg-white text-stone-400 border-stone-200 hover:border-stone-400'
+                          }`}
+                          aria-label={`Rate ${star} stars`}
+                        >
+                          ★
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-widest text-stone-500 mb-2">
+                      Your Review
+                    </label>
+                    <textarea
+                      rows={3}
+                      required
+                      value={reviewComment}
+                      onChange={(e) => setReviewComment(e.target.value)}
+                      placeholder="How is the build quality, sizing, or delivery experience?"
+                      className="w-full bg-white border border-stone-200 px-3.5 py-2.5 text-xs text-stone-900 focus:border-stone-900 focus:outline-none resize-none"
+                    />
+                  </div>
+
+                  {reviewError && (
+                    <p className="text-[11px] text-red-700 bg-red-50 border border-red-200 px-3 py-2">
+                      {reviewError}
+                    </p>
+                  )}
+                  {reviewFeedback && (
+                    <p className="text-[11px] text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-2">
+                      {reviewFeedback}
+                    </p>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={isSubmittingReview}
+                    className="w-full bg-stone-900 text-white text-[10px] uppercase tracking-[0.2em] font-medium py-3.5 hover:bg-black transition-colors disabled:opacity-50"
+                  >
+                    {isSubmittingReview ? 'Publishing...' : 'Publish Review'}
+                  </button>
+                </form>
+              )}
+            </div>
+          </div>
+
+          {/* Right Column: Reviews List */}
+          <div className="lg:col-span-8">
+            {reviewSummary.reviews.length === 0 ? (
+              <div className="p-12 bg-[#FAF9F6] border border-stone-200 text-center">
+                <span className="font-serif italic text-lg text-stone-400 block mb-2">
+                  No student reviews yet.
+                </span>
+                <p className="text-xs text-stone-500">
+                  Be the first to share how this essential fits into your campus routine.
+                </p>
+              </div>
+            ) : (
+              <div className="divide-y divide-stone-200 border-t border-b border-stone-200">
+                {reviewSummary.reviews.map((rev) => (
+                  <article key={rev.id} className="py-6 space-y-2.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-3">
+                        <span className="font-serif text-base text-stone-900 font-medium">
+                          {rev.userName}
+                        </span>
+                        {rev.verifiedPurchase && (
+                          <span className="text-[9px] uppercase tracking-wider font-semibold px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200">
+                            Verified Buyer
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[11px] text-stone-400">{rev.date}</span>
+                    </div>
+
+                    <div className="text-xs tracking-widest text-stone-900">
+                      {'★'.repeat(rev.rating)}
+                      <span className="text-stone-300">{'★'.repeat(5 - rev.rating)}</span>
+                    </div>
+
+                    <p className="text-sm text-stone-600 leading-relaxed">{rev.comment}</p>
+                  </article>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
 
       {/* More Suggestions Section */}
       {suggestions.length > 0 && (

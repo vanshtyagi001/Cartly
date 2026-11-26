@@ -163,3 +163,53 @@ class MeView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+class WishlistView(APIView):
+    def get(self, request):
+        user = get_user_from_request(request)
+        if not user:
+            return Response({"error": "Authentication required."}, status=status.HTTP_401_UNAUTHORIZED)
+        return Response({"wishlist": user.get("wishlist", [])}, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        user = get_user_from_request(request)
+        if not user:
+            return Response({"error": "Authentication required."}, status=status.HTTP_401_UNAUTHORIZED)
+
+        data = request.data or {}
+        try:
+            product_id = int(data.get("productId"))
+        except (TypeError, ValueError):
+            return Response({"error": "Valid productId is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        users_col = get_users_collection()
+        current = list(user.get("wishlist", []))
+        if product_id in current:
+            users_col.update_one({"_id": user["_id"]}, {"$pull": {"wishlist": product_id}})
+            action = "removed"
+        else:
+            users_col.update_one({"_id": user["_id"]}, {"$addToSet": {"wishlist": product_id}})
+            action = "added"
+
+        updated = users_col.find_one({"_id": user["_id"]})
+        return Response(
+            {"wishlist": updated.get("wishlist", []), "action": action},
+            status=status.HTTP_200_OK,
+        )
+
+    def delete(self, request):
+        user = get_user_from_request(request)
+        if not user:
+            return Response({"error": "Authentication required."}, status=status.HTTP_401_UNAUTHORIZED)
+
+        raw_id = request.query_params.get("productId") or (request.data or {}).get("productId")
+        try:
+            product_id = int(raw_id)
+        except (TypeError, ValueError):
+            return Response({"error": "Valid productId is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        users_col = get_users_collection()
+        users_col.update_one({"_id": user["_id"]}, {"$pull": {"wishlist": product_id}})
+        updated = users_col.find_one({"_id": user["_id"]})
+        return Response({"wishlist": updated.get("wishlist", [])}, status=status.HTTP_200_OK)

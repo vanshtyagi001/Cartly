@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from bson import ObjectId
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -488,6 +489,46 @@ class SellerProfileView(APIView):
                 "message": f"Company profile updated to '{store_name}'. All your active listings have been updated.",
                 "user": serialize_user(updated_user),
                 "sellerProfile": updated_profile,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class PublicSellerStoreView(APIView):
+    """
+    Public storefront endpoint for buyers to view a seller's profile and all their listings.
+    GET /api/seller/store/<seller_id>
+    """
+    def get(self, request, seller_id):
+        users_col = get_users_collection()
+        try:
+            seller = users_col.find_one({"_id": ObjectId(seller_id)})
+        except Exception:
+            return Response({"error": "Invalid seller ID."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not seller:
+            return Response({"error": "Campus store not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        raw_status = seller.get("sellerStatus")
+        seller_status = str(raw_status).lower() if raw_status else ("approved" if seller.get("isSeller") else "none")
+        if seller_status != "approved" and not seller.get("isSeller"):
+            return Response({"error": "This campus store is not currently active."}, status=status.HTTP_404_NOT_FOUND)
+
+        profile = seller.get("sellerProfile") or seller.get("sellerDetails") or {}
+        products_col = get_products_collection()
+        docs = list(products_col.find({"sellerId": str(seller["_id"])}).sort("productId", -1))
+
+        return Response(
+            {
+                "store": {
+                    "id": str(seller["_id"]),
+                    "storeName": profile.get("storeName") or seller.get("name") or "Campus Store",
+                    "campusLocation": profile.get("campusLocation") or "North Campus",
+                    "bio": profile.get("bio") or "Verified student seller at Cartly Campus Hub.",
+                    "isVerified": bool(profile.get("isVerified", True)),
+                    "ownerName": seller.get("name", ""),
+                },
+                "products": [format_product(p) for p in docs],
             },
             status=status.HTTP_200_OK,
         )

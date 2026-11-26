@@ -25,3 +25,11 @@ def get_categories_collection():
     if not database:
         database = client.get_default_database("test").name
     return client[database]["categories"]
+
+
+def get_reviews_collection():
+    client = get_client()
+    database = settings.MONGO_DATABASE
+    if not database:
+        database = client.get_default_database("test").name
+    return client[database]["reviews"]

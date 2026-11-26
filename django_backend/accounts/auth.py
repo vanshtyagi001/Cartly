@@ -78,6 +78,7 @@ def serialize_user(user_doc: dict) -> dict:
         "sellerStatus": seller_status,
         "sellerProfile": seller_details,
         "sellerDetails": seller_details,
+        "wishlist": user_doc.get("wishlist", []),
         "defaultAddress": default_address,
         "createdAt": created_at_str,
     }

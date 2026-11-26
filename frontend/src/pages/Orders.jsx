@@ -34,8 +34,41 @@ export default function Orders() {
   const [orders, setOrders] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [confirmingCancelId, setConfirmingCancelId] = useState(null);
+  const [isCancellingOrder, setIsCancellingOrder] = useState(false);
+  const [cancelError, setCancelError] = useState('');
+  const [cancelSuccess, setCancelSuccess] = useState('');
 
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
+  const handleCancelOrder = async (orderId) => {
+    setCancelError('');
+    setCancelSuccess('');
+    setIsCancellingOrder(true);
+    try {
+      const res = await fetch(`${API_URL}/api/orders/${orderId}/cancel`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Could not cancel order.');
+      }
+
+      if (data.order) {
+        setOrders((prev) => prev.map((o) => (o.id === orderId ? data.order : o)));
+        setSelectedOrder(data.order);
+      }
+      setConfirmingCancelId(null);
+      setCancelSuccess(data.message || 'Order cancelled successfully.');
+    } catch (err) {
+      setCancelError(err.message || 'Failed to cancel order.');
+    } finally {
+      setIsCancellingOrder(false);
+    }
+  };
 
   const getFulfillmentStage = (status) => {
     switch (status) {
@@ -310,19 +343,79 @@ export default function Orders() {
               </div>
             </div>
 
+            {/* Cancellation Feedback / Inline Confirmation */}
+            {cancelError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-800 text-xs">
+                {cancelError}
+              </div>
+            )}
+            {cancelSuccess && (
+              <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs">
+                {cancelSuccess}
+              </div>
+            )}
+
+            {confirmingCancelId === selectedOrder.id && (
+              <div className="mb-6 p-4 bg-[#FAF9F6] border border-stone-300 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="text-xs text-stone-700">
+                  <strong className="text-stone-900 block mb-0.5">Confirm Order Cancellation</strong>
+                  <span>This will cancel Order #{selectedOrder.id} and release the reserved stock.</span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    disabled={isCancellingOrder}
+                    onClick={() => setConfirmingCancelId(null)}
+                    className="px-4 py-2 text-[10px] uppercase tracking-widest text-stone-600 border border-stone-300 bg-white hover:text-stone-900"
+                  >
+                    Keep Order
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isCancellingOrder}
+                    onClick={() => handleCancelOrder(selectedOrder.id)}
+                    className="px-4 py-2 text-[10px] uppercase tracking-widest bg-red-700 text-white hover:bg-red-800 disabled:opacity-50"
+                  >
+                    {isCancellingOrder ? 'Cancelling...' : 'Yes, Cancel Order'}
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Actions */}
             <div className="flex flex-wrap items-center justify-between gap-4 pt-6 border-t border-stone-200">
-              <button
-                type="button"
-                onClick={() => window.print()}
-                className="text-[10px] uppercase tracking-widest text-stone-600 hover:text-stone-900 border border-stone-200 px-4 py-2.5 bg-[#FAF9F6] transition-colors"
-              >
-                Print Manifest / Receipt
-              </button>
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="text-[10px] uppercase tracking-widest text-stone-600 hover:text-stone-900 border border-stone-200 px-4 py-2.5 bg-[#FAF9F6] transition-colors"
+                >
+                  Print Manifest / Receipt
+                </button>
+
+                {isAuthenticated && selectedOrder.status === 'Confirmed' && confirmingCancelId !== selectedOrder.id && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCancelError('');
+                      setCancelSuccess('');
+                      setConfirmingCancelId(selectedOrder.id);
+                    }}
+                    className="text-[10px] uppercase tracking-widest text-red-700 hover:text-red-900 border border-red-200 px-4 py-2.5 bg-red-50/60 hover:bg-red-50 transition-colors"
+                  >
+                    Cancel Order
+                  </button>
+                )}
+              </div>
 
               <button
                 type="button"
-                onClick={() => setSelectedOrder(null)}
+                onClick={() => {
+                  setSelectedOrder(null);
+                  setConfirmingCancelId(null);
+                  setCancelError('');
+                  setCancelSuccess('');
+                }}
                 className="bg-stone-900 text-white text-[10px] uppercase tracking-widest font-medium px-8 py-2.5 hover:bg-black transition-colors"
               >
                 Done

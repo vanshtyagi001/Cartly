@@ -2,10 +2,12 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
+import { useWishlist } from '../context/WishlistContext';
 
 export default function Navbar() {
   const { setIsCartOpen, cartCount } = useCart();
   const { user, isAuthenticated, logout } = useAuth();
+  const { wishlistIds } = useWishlist();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -205,6 +207,19 @@ export default function Navbar() {
                   className="flex items-center justify-between px-5 py-2 text-xs text-stone-600 hover:text-stone-900 hover:bg-stone-50 transition-colors"
                 >
                   <span className="uppercase tracking-widest text-[10px]">Your Orders</span>
+                  <svg className="w-3.5 h-3.5 text-stone-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5l7 7-7 7" />
+                  </svg>
+                </Link>
+
+                <Link
+                  to="/wishlist"
+                  onClick={() => setIsUserMenuOpen(false)}
+                  className="flex items-center justify-between px-5 py-2 text-xs text-stone-600 hover:text-stone-900 hover:bg-stone-50 transition-colors"
+                >
+                  <span className="uppercase tracking-widest text-[10px]">
+                    Saved Wishlist {wishlistIds.length > 0 ? `(${wishlistIds.length})` : ''}
+                  </span>
                   <svg className="w-3.5 h-3.5 text-stone-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5l7 7-7 7" />
                   </svg>

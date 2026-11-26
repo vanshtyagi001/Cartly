@@ -1,6 +1,6 @@
 from django.urls import path
 
-from .views import CategoryListView, HealthView, ProductDetailView, ProductListCreateView, RootView
+from .views import CategoryListView, HealthView, ProductDetailView, ProductListCreateView, ProductReviewsView, RootView
 
 
 urlpatterns = [
@@ -8,5 +8,6 @@ urlpatterns = [
     path("api/health", HealthView.as_view(), name="health"),
     path("api/products", ProductListCreateView.as_view(), name="products"),
     path("api/products/<int:product_id>", ProductDetailView.as_view(), name="product-detail"),
+    path("api/products/<int:product_id>/reviews", ProductReviewsView.as_view(), name="product-reviews"),
     path("api/categories", CategoryListView.as_view(), name="categories"),
 ]
