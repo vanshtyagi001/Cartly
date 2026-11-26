@@ -13,6 +13,8 @@ import Login from './pages/Login';
 import Profile from './pages/Profile';
 import SellerStudio from './pages/SellerStudio';
 import AdminPanel from './pages/AdminPanel';
+import About from './pages/About';
+import Support from './pages/Support';
 import CartDrawer from './components/CartDrawer';
 
 export default function App() {
@@ -33,6 +35,13 @@ export default function App() {
               <Route path="/profile" element={<Profile />} />
               <Route path="/seller" element={<SellerStudio />} />
               <Route path="/admin" element={<AdminPanel />} />
+              <Route path="/about" element={<About />} />
+              <Route path="/contact" element={<Support defaultSection="contact" />} />
+              <Route path="/customer-care" element={<Support defaultSection="care" />} />
+              <Route path="/delivery-info" element={<Support defaultSection="delivery" />} />
+              <Route path="/refund-policy" element={<Support defaultSection="refund" />} />
+              <Route path="/privacy-policy" element={<Support defaultSection="privacy" />} />
+              <Route path="/terms" element={<Support defaultSection="terms" />} />
             </Routes>
             
             <Footer />

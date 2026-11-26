@@ -268,11 +268,6 @@ export default function Shop() {
                       <span className="text-[9px] uppercase tracking-widest text-stone-400 block">
                         {product.category}
                       </span>
-                      {product.sellerName && product.sellerName !== "Cartly Campus Hub" && (
-                        <span className="text-[8px] uppercase tracking-wider text-stone-500 font-medium truncate max-w-[100px]">
-                          By {product.sellerName.split("'")[0]}
-                        </span>
-                      )}
                     </div>
                     <div className="flex flex-col gap-1">
                       <h4 className="text-stone-900 font-serif text-base leading-tight line-clamp-2">

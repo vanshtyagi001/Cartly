@@ -111,14 +111,14 @@ export default function Footer() {
             <Link to="/about" className="text-sm font-sans tracking-wide text-stone-300 hover:text-white transition-colors duration-300">About Cartly</Link>
           </div>
 
-          {/* Support remains anchor tags */}
+          {/* Support routes */}
           <div className="flex flex-col gap-3">
             <h4 className="text-[9px] uppercase tracking-[0.25em] text-stone-600 font-semibold mb-2">Support</h4>
-            <a href="#contact" className="text-sm font-sans tracking-wide text-stone-300 hover:text-white transition-colors duration-300">Contact Us</a>
-            <a href="#care" className="text-sm font-sans tracking-wide text-stone-300 hover:text-white transition-colors duration-300">Customer Care</a>
-            <a href="#delivery" className="text-sm font-sans tracking-wide text-stone-300 hover:text-white transition-colors duration-300">Delivery Info</a>
-            <a href="#refund" className="text-sm font-sans tracking-wide text-stone-300 hover:text-white transition-colors duration-300">Refund Policy</a>
-            <a href="#privacy" className="text-sm font-sans tracking-wide text-stone-300 hover:text-white transition-colors duration-300">Privacy Policy</a>
+            <Link to="/contact" className="text-sm font-sans tracking-wide text-stone-300 hover:text-white transition-colors duration-300">Contact Us</Link>
+            <Link to="/customer-care" className="text-sm font-sans tracking-wide text-stone-300 hover:text-white transition-colors duration-300">Customer Care</Link>
+            <Link to="/delivery-info" className="text-sm font-sans tracking-wide text-stone-300 hover:text-white transition-colors duration-300">Delivery Info</Link>
+            <Link to="/refund-policy" className="text-sm font-sans tracking-wide text-stone-300 hover:text-white transition-colors duration-300">Refund Policy</Link>
+            <Link to="/privacy-policy" className="text-sm font-sans tracking-wide text-stone-300 hover:text-white transition-colors duration-300">Privacy Policy</Link>
           </div>
 
         </div>
@@ -130,8 +130,8 @@ export default function Footer() {
           &copy; {new Date().getFullYear()} Cartly.
         </div>
         <div className="flex gap-8 text-[10px] uppercase tracking-[0.1em] text-stone-600 font-medium">
-          <a href="#terms" className="hover:text-stone-300 transition-colors duration-300">Terms of Service</a>
-          <a href="#privacy" className="hover:text-stone-300 transition-colors duration-300">Privacy Policy</a>
+          <Link to="/terms" className="hover:text-stone-300 transition-colors duration-300">Terms of Service</Link>
+          <Link to="/privacy-policy" className="hover:text-stone-300 transition-colors duration-300">Privacy Policy</Link>
         </div>
       </div>
     </footer>
