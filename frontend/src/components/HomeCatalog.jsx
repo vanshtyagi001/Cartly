@@ -141,86 +141,97 @@ export default function HomeCatalog() {
               )}
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 lg:h-[460px] bg-white border border-stone-200 shadow-sm overflow-hidden">
-              {/* Image Side — Fixed dimensions so card size never jumps */}
-              <Link
-                to={`/product/${activeSpotlight.id}`}
-                className="lg:col-span-6 h-[300px] sm:h-[360px] lg:h-full bg-[#FAF9F6] border-b lg:border-b-0 lg:border-r border-stone-200 overflow-hidden group relative block"
+            <div className="relative overflow-hidden bg-white border border-stone-200 shadow-sm">
+              <div
+                className="flex transition-transform duration-700 ease-[cubic-bezier(0.25,0.1,0.25,1)]"
+                style={{ transform: `translateX(-${spotlightIndex * 100}%)` }}
               >
-                <img
-                  key={activeSpotlight.id}
-                  src={activeSpotlight.img}
-                  alt={activeSpotlight.name}
-                  className="absolute inset-0 w-full h-full object-cover object-center mix-blend-multiply group-hover:scale-105 transition-transform duration-700"
-                />
-                <span className="absolute top-4 left-4 z-10 bg-white/95 backdrop-blur-sm border border-stone-200 px-3 py-1 text-[9px] uppercase tracking-[0.2em] font-semibold text-stone-800">
-                  {activeSpotlight.category}
-                </span>
-              </Link>
-
-              {/* Details Side */}
-              <div className="lg:col-span-6 h-full p-8 sm:p-10 lg:p-12 flex flex-col justify-between overflow-hidden">
-                <div>
-                  <div className="flex items-center justify-between gap-3 mb-4">
-                    <span className="text-[10px] uppercase tracking-[0.2em] text-stone-400 font-medium truncate">
-                      Sold by {activeSpotlight.sellerName || 'Cartly Campus Hub'}
-                    </span>
-                    <span className="text-[10px] uppercase tracking-wider font-semibold px-2.5 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 shrink-0">
-                      {activeSpotlight.stock !== undefined ? `${activeSpotlight.stock} in stock` : 'In Stock'}
-                    </span>
-                  </div>
-
-                  <Link to={`/product/${activeSpotlight.id}`} className="group">
-                    <h3 className="text-2xl sm:text-3xl lg:text-4xl font-serif text-stone-900 tracking-tight mb-3 group-hover:underline line-clamp-2">
-                      {activeSpotlight.name}
-                    </h3>
-                  </Link>
-
-                  <p className="text-xl sm:text-2xl font-sans text-stone-900 mb-4">{activeSpotlight.price}</p>
-
-                  <p className="text-stone-500 text-sm leading-relaxed mb-6 line-clamp-3">
-                    {activeSpotlight.description ||
-                      'Verified campus essential ready for fast hostel and campus delivery.'}
-                  </p>
-                </div>
-
-                <div className="space-y-6">
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        handleQuickAdd(e, activeSpotlight);
-                        setIsCartOpen(true);
-                      }}
-                      className="flex-1 bg-stone-900 text-white text-xs uppercase tracking-[0.15em] font-medium py-4 px-6 hover:bg-black transition-colors"
-                    >
-                      Quick Add to Cart
-                    </button>
+                {spotlightItems.map((item) => (
+                  <div
+                    key={item.id}
+                    className="w-full shrink-0 grid grid-cols-1 lg:grid-cols-12 lg:h-[460px]"
+                  >
+                    {/* Image Side — Fixed dimensions so card size never jumps */}
                     <Link
-                      to={`/product/${activeSpotlight.id}`}
-                      className="flex-1 text-center border border-stone-300 bg-white text-stone-900 text-xs uppercase tracking-[0.15em] font-medium py-4 px-6 hover:border-stone-900 transition-colors"
+                      to={`/product/${item.id}`}
+                      className="lg:col-span-6 h-[300px] sm:h-[360px] lg:h-full bg-[#FAF9F6] border-b lg:border-b-0 lg:border-r border-stone-200 overflow-hidden group relative block"
                     >
-                      View Details →
+                      <img
+                        src={item.img}
+                        alt={item.name}
+                        className="absolute inset-0 w-full h-full object-cover object-center mix-blend-multiply group-hover:scale-105 transition-transform duration-700"
+                      />
+                      <span className="absolute top-4 left-4 z-10 bg-white/95 backdrop-blur-sm border border-stone-200 px-3 py-1 text-[9px] uppercase tracking-[0.2em] font-semibold text-stone-800">
+                        {item.category}
+                      </span>
                     </Link>
-                  </div>
 
-                  {/* Progress Indicator Bars */}
-                  {spotlightItems.length > 1 && (
-                    <div className="flex gap-2 pt-2">
-                      {spotlightItems.map((item, idx) => (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => setSpotlightIndex(idx)}
-                          className={`h-1 flex-1 transition-all ${
-                            idx === spotlightIndex ? 'bg-stone-900' : 'bg-stone-200 hover:bg-stone-400'
-                          }`}
-                          aria-label={`Show featured item ${idx + 1}`}
-                        />
-                      ))}
+                    {/* Details Side */}
+                    <div className="lg:col-span-6 h-full p-8 sm:p-10 lg:p-12 flex flex-col justify-between overflow-hidden">
+                      <div>
+                        <div className="flex items-center justify-between gap-3 mb-4">
+                          <span className="text-[10px] uppercase tracking-[0.2em] text-stone-400 font-medium truncate">
+                            Sold by {item.sellerName || 'Cartly Campus Hub'}
+                          </span>
+                          <span className="text-[10px] uppercase tracking-wider font-semibold px-2.5 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 shrink-0">
+                            {item.stock !== undefined ? `${item.stock} in stock` : 'In Stock'}
+                          </span>
+                        </div>
+
+                        <Link to={`/product/${item.id}`} className="group">
+                          <h3 className="text-2xl sm:text-3xl lg:text-4xl font-serif text-stone-900 tracking-tight mb-3 group-hover:underline line-clamp-2">
+                            {item.name}
+                          </h3>
+                        </Link>
+
+                        <p className="text-xl sm:text-2xl font-sans text-stone-900 mb-4">{item.price}</p>
+
+                        <p className="text-stone-500 text-sm leading-relaxed mb-6 line-clamp-3">
+                          {item.description ||
+                            'Verified campus essential ready for fast hostel and campus delivery.'}
+                        </p>
+                      </div>
+
+                      <div className="space-y-6">
+                        <div className="flex flex-col sm:flex-row gap-3">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              handleQuickAdd(e, item);
+                              setIsCartOpen(true);
+                            }}
+                            className="flex-1 bg-stone-900 text-white text-xs uppercase tracking-[0.15em] font-medium py-4 px-6 hover:bg-black transition-colors"
+                          >
+                            Quick Add to Cart
+                          </button>
+                          <Link
+                            to={`/product/${item.id}`}
+                            className="flex-1 text-center border border-stone-300 bg-white text-stone-900 text-xs uppercase tracking-[0.15em] font-medium py-4 px-6 hover:border-stone-900 transition-colors"
+                          >
+                            View Details →
+                          </Link>
+                        </div>
+
+                        {/* Progress Indicator Bars */}
+                        {spotlightItems.length > 1 && (
+                          <div className="flex gap-2 pt-2">
+                            {spotlightItems.map((dotItem, idx) => (
+                              <button
+                                key={dotItem.id}
+                                type="button"
+                                onClick={() => setSpotlightIndex(idx)}
+                                className={`h-1 flex-1 transition-all duration-300 ${
+                                  idx === spotlightIndex ? 'bg-stone-900' : 'bg-stone-200 hover:bg-stone-400'
+                                }`}
+                                aria-label={`Show featured item ${idx + 1}`}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  )}
-                </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
