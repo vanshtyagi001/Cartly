@@ -1,0 +1,16 @@
+{
+  "name": "cartly-root",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cartly - Campus Essentials Marketplace",
+  "scripts": {
+    "dev": "concurrently -n \"backend,frontend\" -c \"blue,green\" \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd django_backend && .venv\\Scripts\\python.exe manage.py runserver 5000",
+    "dev:frontend": "npm run dev --prefix frontend -- --host",
+    "start": "npm run dev",
+    "build": "npm run build --prefix frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

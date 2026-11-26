@@ -99,15 +99,33 @@ Cartly is built on a decoupled full-stack architecture prioritizing component re
 
 ---
 
-### Option A: Quick Start (Windows)
-Cartly includes convenience scripts in the repository root:
-1. Double-click `start-backend.bat` to activate the virtual environment and boot the Django API on port `5000`.
-2. Double-click `start-frontend.bat` to launch the Vite development server on port `5173`.
-3. Open your browser at [http://127.0.0.1:5173](http://127.0.0.1:5173).
+### Option A: Unified 1-Command Start (Recommended)
+You can boot both the Django backend and Vite frontend concurrently with a single command from the project root:
+
+```bash
+npm run dev
+```
+
+Alternatively on Windows, double-click:
+```bash
+start-dev.bat
+```
+
+Both servers will start concurrently:
+* 🌐 **Frontend (React + Vite):** [http://localhost:5173](http://localhost:5173)
+* ⚙️ **Backend API (Django):** [http://localhost:5000](http://localhost:5000)
 
 ---
 
-### Option B: Manual Setup
+### Option B: Quick Start (Separate Windows)
+Cartly includes convenience scripts in the repository root:
+1. Double-click `start-backend.bat` to activate the virtual environment and boot the Django API on port `5000`.
+2. Double-click `start-frontend.bat` to launch the Vite development server on port `5173`.
+3. Open your browser at [http://localhost:5173](http://localhost:5173).
+
+---
+
+### Option C: Manual Setup
 
 #### 1. Backend Setup (Django)
 ```powershell
