@@ -1,27 +1,12 @@
 import React, { useState, useRef } from 'react';
 
-export default function ImageUploadInput({
-  value,
-  onChange,
-  presets = [],
-  label = "Product Image",
-}) {
-  const [mode, setMode] = useState(value && !value.startsWith('data:') ? 'url' : 'file');
-  const [urlInput, setUrlInput] = useState(value && !value.startsWith('data:') ? value : '');
-  const [isDragging, setIsDragging] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [error, setError] = useState(null);
-  const fileInputRef = useRef(null);
-
-  // Compress & convert file to clean base64 data URL
-  const processFile = (file) => {
-    if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      setError('Please select an image file (JPEG, PNG, WebP).');
+// Compress & convert an image File to a base64 JPEG data URL
+export function compressImageFile(file) {
+  return new Promise((resolve, reject) => {
+    if (!file || !file.type.startsWith('image/')) {
+      reject(new Error('Please select image files only (JPEG, PNG, WebP).'));
       return;
     }
-    setError(null);
-    setIsProcessing(true);
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -47,26 +32,45 @@ export default function ImageUploadInput({
           const ctx = canvas.getContext('2d');
           ctx.drawImage(img, 0, 0, width, height);
 
-          const compressed = canvas.toDataURL('image/jpeg', 0.85);
-          onChange(compressed);
-          setUrlInput('');
-        } catch (err) {
-          setError('Failed to compress image.');
-        } finally {
-          setIsProcessing(false);
+          resolve(canvas.toDataURL('image/jpeg', 0.85));
+        } catch {
+          reject(new Error(`Failed to compress ${file.name}.`));
         }
       };
-      img.onerror = () => {
-        setError('Invalid image file format.');
-        setIsProcessing(false);
-      };
+      img.onerror = () => reject(new Error(`Invalid image format: ${file.name}.`));
       img.src = event.target.result;
     };
-    reader.onerror = () => {
-      setError('Error reading file from disk.');
-      setIsProcessing(false);
-    };
+    reader.onerror = () => reject(new Error(`Error reading ${file.name} from disk.`));
     reader.readAsDataURL(file);
+  });
+}
+
+export default function ImageUploadInput({
+  value,
+  onChange,
+  presets = [],
+  label = "Product Image",
+}) {
+  const [mode, setMode] = useState(value && !value.startsWith('data:') ? 'url' : 'file');
+  const [urlInput, setUrlInput] = useState(value && !value.startsWith('data:') ? value : '');
+  const [isDragging, setIsDragging] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState(null);
+  const fileInputRef = useRef(null);
+
+  const processFile = async (file) => {
+    if (!file) return;
+    setError(null);
+    setIsProcessing(true);
+    try {
+      const compressed = await compressImageFile(file);
+      onChange(compressed);
+      setUrlInput('');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleDragOver = (e) => {
