@@ -8,21 +8,47 @@ export default function Product() {
   const [showToast, setShowToast] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   
-  // NEW: State for fetching the specific product from the backend
+  // State for fetching the specific product and suggested items from the backend
   const [product, setProduct] = useState(null);
+  const [suggestions, setSuggestions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   
   const { addToCart, setIsCartOpen } = useCart(); 
 
-  // NEW: Fetch products from backend and find the matching one
+  // Fetch products from backend, find active product, and extract contextual suggestions
   useEffect(() => {
     setIsLoading(true);
+    setQuantity(1);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
     fetch(`${import.meta.env.VITE_API_URL}/api/products`)
       .then(res => res.json())
       .then(data => {
-        // Find the specific product matching the URL id
-        const foundProduct = data.find(p => p.id === parseInt(id));
+        if (!Array.isArray(data)) {
+          setProduct(null);
+          setIsLoading(false);
+          return;
+        }
+
+        const currentId = parseInt(id);
+        const foundProduct = data.find(p => p.id === currentId);
         setProduct(foundProduct);
+
+        if (foundProduct) {
+          // Priority 1: Same category, excluding current product
+          const sameCategory = data.filter(
+            p => p.id !== currentId && p.category === foundProduct.category
+          );
+          // Priority 2: Other campus products
+          const otherProducts = data.filter(
+            p => p.id !== currentId && p.category !== foundProduct.category
+          );
+
+          // Combine to yield 4 curated suggestions
+          const combinedSuggestions = [...sameCategory, ...otherProducts].slice(0, 4);
+          setSuggestions(combinedSuggestions);
+        }
+
         setIsLoading(false);
       })
       .catch(error => {
@@ -194,6 +220,74 @@ export default function Product() {
           
         </main>
       </div>
+
+      {/* More Suggestions Section */}
+      {suggestions.length > 0 && (
+        <section className="w-full bg-[#FAF9F6] border-t border-stone-200 py-16 lg:py-24">
+          <div className="max-w-[1400px] mx-auto px-8 md:px-12">
+            
+            {/* Suggestions Header */}
+            <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-10 pb-4 border-b border-stone-200 gap-4">
+              <div>
+                <span className="text-[10px] uppercase tracking-[0.25em] text-stone-400 font-medium block mb-1">
+                  Curated Campus Essentials
+                </span>
+                <h3 className="text-2xl sm:text-3xl font-serif text-stone-900 tracking-tight">
+                  You May Also Need
+                </h3>
+              </div>
+              <Link
+                to={product.category ? `/shop?category=${encodeURIComponent(product.category)}` : "/shop"}
+                className="text-[10px] uppercase tracking-widest text-stone-500 hover:text-stone-900 border-b border-stone-400 pb-0.5 transition-colors self-start sm:self-auto"
+              >
+                Browse All {product.category || "Essentials"} →
+              </Link>
+            </div>
+
+            {/* Suggestions Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 lg:gap-8">
+              {suggestions.map((item) => (
+                <Link
+                  key={item.id}
+                  to={`/product/${item.id}`}
+                  className="group block bg-white border border-stone-200 p-4 transition-all duration-300 hover:border-stone-400 hover:shadow-sm"
+                >
+                  {/* Photo Frame */}
+                  <div className="aspect-square w-full bg-[#FAF9F6] overflow-hidden border border-stone-100 mb-4 relative">
+                    <img
+                      src={item.img}
+                      alt={item.name}
+                      className="w-full h-full object-cover mix-blend-multiply group-hover:scale-105 transition-transform duration-700 ease-[cubic-bezier(0.25,0.1,0.25,1)]"
+                    />
+                    <div className="absolute top-2 left-2">
+                      <span className="bg-white/90 backdrop-blur-sm border border-stone-200 text-[8px] uppercase tracking-wider font-semibold px-2 py-0.5 text-stone-700">
+                        {item.category}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Product Metadata */}
+                  <div className="flex flex-col">
+                    <div className="flex items-center justify-between text-[9px] text-stone-400 uppercase tracking-widest mb-1">
+                      <span>{item.sellerName ? item.sellerName.split("'")[0] : 'Campus Store'}</span>
+                      <span className={(item.stock !== undefined ? item.stock : 25) > 0 ? 'text-emerald-700 font-medium' : 'text-red-600'}>
+                        {(item.stock !== undefined ? item.stock : 25) > 0 ? 'In Stock' : 'Sold Out'}
+                      </span>
+                    </div>
+                    <h4 className="font-serif text-stone-900 text-base leading-snug line-clamp-1 group-hover:text-amber-900 transition-colors">
+                      {item.name}
+                    </h4>
+                    <span className="font-sans text-sm font-medium text-stone-700 mt-2">
+                      {item.price}
+                    </span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+
+          </div>
+        </section>
+      )}
 
       {/* Lightbox / Fullscreen Image Overlay */}
       <div 
