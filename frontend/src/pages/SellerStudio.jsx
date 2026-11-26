@@ -697,20 +697,9 @@ export default function SellerStudio() {
         {/* Studio Header */}
         <div className="mb-10 pb-6 border-b border-stone-200 flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div>
-            <div className="flex items-center gap-3 mb-2">
-              <span className="text-[10px] uppercase tracking-[0.25em] font-medium text-stone-400 block">
-                Cartly Seller Hub
-              </span>
-              <button
-                type="button"
-                onClick={() => setActiveTab('settings')}
-                className="text-[10px] uppercase tracking-wider font-semibold text-stone-500 hover:text-stone-900 underline flex items-center gap-1 transition-colors"
-                title="Change registered company/store name"
-              >
-                <span>Edit Company Name</span>
-                <span>→</span>
-              </button>
-            </div>
+            <span className="text-[10px] uppercase tracking-[0.25em] font-medium text-stone-400 block mb-2">
+              Cartly Seller Hub
+            </span>
             <h1 className="text-3xl md:text-5xl font-serif text-stone-900 tracking-tight">
               {sellerProfile.storeName || "Your Campus Store"}
             </h1>
