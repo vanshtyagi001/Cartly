@@ -303,9 +303,16 @@ export default function Product() {
           {/* Right Column: Product Information */}
           <div className="w-full lg:w-1/2 flex flex-col pt-4 lg:pt-8">
             <div className="flex items-center justify-between gap-4 mb-4">
-              <span className="text-[10px] font-medium text-stone-500 tracking-[0.2em] uppercase">
-                {product.category}
-              </span>
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="text-[10px] font-medium text-stone-500 tracking-[0.2em] uppercase">
+                  {product.category}
+                </span>
+                {product.condition && (
+                  <span className="text-[9px] uppercase tracking-wider font-semibold px-2 py-0.5 bg-[#FAF9F6] border border-stone-200 text-stone-700">
+                    {product.condition}
+                  </span>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={() => toggleWishlist(product.id)}

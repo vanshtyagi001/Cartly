@@ -206,6 +206,9 @@ class AdminProductsView(APIView):
         category = str(data.get("category", "Hostel Essentials")).strip()
         featured_img, images = normalize_product_images(data.get("img"), data.get("images"))
         description = str(data.get("description", "")).strip()
+        condition = str(data.get("condition", "Brand New")).strip()
+        if condition not in ("Brand New", "Like New", "Gently Used"):
+            condition = "Brand New"
 
         try:
             raw_price = data.get("price", 0)
@@ -240,6 +243,7 @@ class AdminProductsView(APIView):
             "category": category,
             "price": price,
             "stock": stock,
+            "condition": condition,
             "img": featured_img,
             "images": images,
             "description": description or "Official Cartly Campus Catalog Essential.",
@@ -295,6 +299,10 @@ class AdminProductsView(APIView):
             update_fields["images"] = images
         if "description" in data:
             update_fields["description"] = str(data["description"]).strip()
+        if "condition" in data:
+            cond = str(data["condition"]).strip()
+            if cond in ("Brand New", "Like New", "Gently Used"):
+                update_fields["condition"] = cond
         if "inStock" in data:
             update_fields["inStock"] = bool(data["inStock"])
 

@@ -20,6 +20,9 @@ export default function SellerStudio() {
   const [orders, setOrders] = useState([]);
   const [questions, setQuestions] = useState([]);
   const [replyDrafts, setReplyDrafts] = useState({});
+  const [lowStockItems, setLowStockItems] = useState([]);
+  const [topSellers, setTopSellers] = useState([]);
+  const [adjustingStockId, setAdjustingStockId] = useState(null);
   const [categories, setCategories] = useState([
     'Hostel Essentials',
     'Electronics',
@@ -76,6 +79,7 @@ export default function SellerStudio() {
   const [newProduct, setNewProduct] = useState({
     name: '',
     category: 'Hostel Essentials',
+    condition: 'Brand New',
     price: '',
     stock: 25,
     img: '',
@@ -112,6 +116,8 @@ export default function SellerStudio() {
       if (statsRes.ok) {
         const statsData = await statsRes.json();
         setStats(statsData.stats || {});
+        setLowStockItems(statsData.lowStockItems || []);
+        setTopSellers(statsData.topSellers || []);
       }
 
       // Load products
@@ -222,6 +228,7 @@ export default function SellerStudio() {
       setNewProduct({
         name: '',
         category: 'Hostel Essentials',
+        condition: 'Brand New',
         price: '',
         stock: 25,
         img: '',
@@ -260,6 +267,7 @@ export default function SellerStudio() {
           category: editingProduct.category,
           price: editingProduct.rawPrice !== undefined ? editingProduct.rawPrice : editingProduct.price,
           stock: Math.max(0, parseInt(editingProduct.stock, 10) || 0),
+          condition: editingProduct.condition || 'Brand New',
           img: editingProduct.img,
           images: editingProduct.images || [],
           description: editingProduct.description,
@@ -322,6 +330,36 @@ export default function SellerStudio() {
       }
     } catch (err) {
       console.error('Status update error:', err);
+    }
+  };
+
+  const handleQuickStockAdjust = async (item, delta) => {
+    const currentStock = item.stock !== undefined ? Number(item.stock) : 25;
+    const nextStock = Math.max(0, currentStock + delta);
+    if (nextStock === currentStock) return;
+
+    setAdjustingStockId(item.id);
+    // Optimistic update
+    setProducts((prev) =>
+      prev.map((p) => (p.id === item.id ? { ...p, stock: nextStock, inStock: nextStock > 0 } : p))
+    );
+
+    try {
+      const res = await fetch(`${API_URL}/api/seller/products/${item.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ stock: nextStock, inStock: nextStock > 0 }),
+      });
+      if (res.ok) {
+        loadSellerData();
+      }
+    } catch (err) {
+      console.error('Quick stock adjust failed:', err);
+    } finally {
+      setAdjustingStockId(null);
     }
   };
 
@@ -822,6 +860,74 @@ export default function SellerStudio() {
           </div>
         </div>
 
+        {/* Store Insights: Low-Stock Warnings & Top Performing Items */}
+        {(lowStockItems.length > 0 || topSellers.length > 0) && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-12">
+            {/* Low-Stock Alerts */}
+            <div className="bg-white border border-stone-200 p-6 shadow-sm">
+              <div className="flex items-center justify-between pb-3 mb-4 border-b border-stone-100">
+                <span className="text-[10px] uppercase tracking-widest text-stone-500 font-semibold">
+                  Low-Stock Alerts (≤ 5 Left)
+                </span>
+                <span className="text-[10px] font-mono text-stone-400">
+                  {lowStockItems.length} {lowStockItems.length === 1 ? 'item' : 'items'}
+                </span>
+              </div>
+              {lowStockItems.length === 0 ? (
+                <p className="text-xs text-stone-400 italic py-2">All listings have healthy stock levels.</p>
+              ) : (
+                <div className="divide-y divide-stone-100">
+                  {lowStockItems.slice(0, 4).map((ls) => (
+                    <div key={ls.id} className="py-2.5 flex items-center justify-between gap-3 text-xs">
+                      <div className="min-w-0">
+                        <p className="font-serif text-stone-900 text-sm truncate">{ls.name}</p>
+                        <span className={`text-[10px] uppercase tracking-wider font-semibold ${ls.stock === 0 ? 'text-red-700' : 'text-amber-800'}`}>
+                          {ls.stock === 0 ? 'Out of Stock' : `Only ${ls.stock} left`}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleQuickStockAdjust({ id: ls.id, stock: ls.stock }, 5)}
+                        className="px-3 py-1.5 border border-stone-300 bg-[#FAF9F6] hover:bg-stone-900 hover:text-white hover:border-stone-900 text-[10px] uppercase tracking-wider font-medium transition-colors shrink-0"
+                      >
+                        +5 Restock
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Top Sellers */}
+            <div className="bg-white border border-stone-200 p-6 shadow-sm">
+              <div className="flex items-center justify-between pb-3 mb-4 border-b border-stone-100">
+                <span className="text-[10px] uppercase tracking-widest text-stone-500 font-semibold">
+                  Top Performing Items
+                </span>
+                <span className="text-[10px] font-mono text-stone-400">By Units Sold</span>
+              </div>
+              {topSellers.length === 0 ? (
+                <p className="text-xs text-stone-400 italic py-2">Sales insights will appear once orders arrive.</p>
+              ) : (
+                <div className="divide-y divide-stone-100">
+                  {topSellers.map((ts, idx) => (
+                    <div key={ts.id} className="py-2.5 flex items-center justify-between gap-3 text-xs">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span className="text-[10px] font-mono text-stone-400 w-4">0{idx + 1}</span>
+                        <p className="font-serif text-stone-900 text-sm truncate">{ts.name}</p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className="font-medium text-stone-900 block">{ts.unitsSold} sold</span>
+                        <span className="text-[10px] text-stone-400">{ts.formattedRevenue}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Navigation Tabs */}
         <div className="flex border-b border-stone-200 mb-8 space-x-8 overflow-x-auto">
           <button
@@ -971,6 +1077,21 @@ export default function SellerStudio() {
                     </div>
 
                     <div className="sm:col-span-2">
+                      <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
+                        Item Condition *
+                      </label>
+                      <select
+                        value={editingProduct.condition || 'Brand New'}
+                        onChange={(e) => setEditingProduct(prev => ({ ...prev, condition: e.target.value }))}
+                        className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-2.5 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none"
+                      >
+                        <option value="Brand New">Brand New</option>
+                        <option value="Like New">Like New</option>
+                        <option value="Gently Used">Gently Used</option>
+                      </select>
+                    </div>
+
+                    <div className="sm:col-span-2">
                       <ProductImagesInput
                         img={editingProduct.img || ''}
                         images={editingProduct.images || []}
@@ -1100,6 +1221,21 @@ export default function SellerStudio() {
                     </div>
 
                     <div className="sm:col-span-2">
+                      <label className="block text-[10px] uppercase tracking-widest font-medium text-stone-500 mb-1.5">
+                        Item Condition *
+                      </label>
+                      <select
+                        value={newProduct.condition || 'Brand New'}
+                        onChange={(e) => setNewProduct(prev => ({ ...prev, condition: e.target.value }))}
+                        className="w-full bg-[#FAF9F6] border border-stone-200 px-4 py-2.5 text-stone-900 text-sm focus:border-stone-900 focus:bg-white focus:outline-none"
+                      >
+                        <option value="Brand New">Brand New</option>
+                        <option value="Like New">Like New</option>
+                        <option value="Gently Used">Gently Used</option>
+                      </select>
+                    </div>
+
+                    <div className="sm:col-span-2">
                       <ProductImagesInput
                         img={newProduct.img}
                         images={newProduct.images || []}
@@ -1175,7 +1311,12 @@ export default function SellerStudio() {
                         <Link to={`/product/${item.id}`} className="font-serif text-stone-900 text-base hover:underline block">
                           {item.name}
                         </Link>
-                        <p className="text-stone-400 text-xs line-clamp-1">{item.description}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 bg-[#FAF9F6] border border-stone-200 text-stone-600 font-medium">
+                            {item.condition || 'Brand New'}
+                          </span>
+                          <p className="text-stone-400 text-xs line-clamp-1">{item.description}</p>
+                        </div>
                       </div>
                     </div>
 
@@ -1187,14 +1328,40 @@ export default function SellerStudio() {
                       {item.price}
                     </div>
 
-                    <div className="sm:col-span-2 space-y-1">
-                      <span className={`inline-block px-2 py-0.5 text-[10px] uppercase tracking-wider font-semibold ${
-                        (item.stock !== undefined ? item.stock : 25) > 0
-                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                          : 'bg-red-50 text-red-800 border border-red-200'
-                      }`}>
-                        {(item.stock !== undefined ? item.stock : 25) > 0 ? `${item.stock !== undefined ? item.stock : 25} in stock` : 'Out of stock'}
-                      </span>
+                    <div className="sm:col-span-2 space-y-1.5">
+                      <div className="inline-flex items-center border border-stone-200 bg-[#FAF9F6]">
+                        <button
+                          type="button"
+                          disabled={adjustingStockId === item.id || (item.stock !== undefined ? item.stock : 25) <= 0}
+                          onClick={() => handleQuickStockAdjust(item, -1)}
+                          className="w-7 h-7 flex items-center justify-center text-stone-600 hover:bg-stone-200 hover:text-stone-900 disabled:opacity-30 transition-colors"
+                          aria-label="Decrease stock"
+                        >
+                          −
+                        </button>
+                        <span
+                          className={`px-2.5 text-[10px] uppercase tracking-wider font-semibold ${
+                            (item.stock !== undefined ? item.stock : 25) > 0
+                              ? (item.stock !== undefined ? item.stock : 25) <= 5
+                                ? 'text-amber-800'
+                                : 'text-emerald-800'
+                              : 'text-red-700'
+                          }`}
+                        >
+                          {(item.stock !== undefined ? item.stock : 25) > 0
+                            ? `${item.stock !== undefined ? item.stock : 25}`
+                            : '0'}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={adjustingStockId === item.id}
+                          onClick={() => handleQuickStockAdjust(item, 1)}
+                          className="w-7 h-7 flex items-center justify-center text-stone-600 hover:bg-stone-200 hover:text-stone-900 disabled:opacity-30 transition-colors"
+                          aria-label="Increase stock"
+                        >
+                          +
+                        </button>
+                      </div>
                       {item.restockAlertCount > 0 && (
                         <span className="block text-[10px] text-amber-800 font-medium">
                           {item.restockAlertCount} {item.restockAlertCount === 1 ? 'student' : 'students'} waiting for restock

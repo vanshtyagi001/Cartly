@@ -159,10 +159,46 @@ class SellerDashboardStatsView(APIView):
         total_orders = len(all_orders)
 
         total_revenue = 0.0
+        sales_by_product = {}
         for o in all_orders:
+            if o.get("status") == "Cancelled":
+                continue
             for item in o.get("items", []):
                 if item.get("sellerId") == user_id:
-                    total_revenue += float(item.get("rawPrice", 0)) * int(item.get("quantity", 1))
+                    qty = int(item.get("quantity", 1) or 1)
+                    rev = float(item.get("rawPrice", 0) or 0) * qty
+                    total_revenue += rev
+                    pid = item.get("id")
+                    if pid is not None:
+                        if pid not in sales_by_product:
+                            sales_by_product[pid] = {
+                                "id": pid,
+                                "name": item.get("name", f"Item #{pid}"),
+                                "unitsSold": 0,
+                                "revenue": 0.0,
+                            }
+                        sales_by_product[pid]["unitsSold"] += qty
+                        sales_by_product[pid]["revenue"] += rev
+
+        low_stock_items = []
+        for p in seller_products:
+            stk = int(p.get("stock", 25) if p.get("stock") is not None else 25)
+            if stk <= 5:
+                low_stock_items.append({
+                    "id": p.get("productId"),
+                    "name": p.get("name", ""),
+                    "stock": stk,
+                    "category": p.get("category", ""),
+                })
+        low_stock_items.sort(key=lambda x: x["stock"])
+
+        top_sellers = sorted(
+            sales_by_product.values(),
+            key=lambda x: (x["unitsSold"], x["revenue"]),
+            reverse=True,
+        )[:3]
+        for ts in top_sellers:
+            ts["formattedRevenue"] = f"₹{ts['revenue']:,.2f}"
 
         return Response(
             {
@@ -175,6 +211,8 @@ class SellerDashboardStatsView(APIView):
                     "totalRevenue": f"₹{total_revenue:,.2f}",
                     "rawRevenue": total_revenue,
                 },
+                "lowStockItems": low_stock_items,
+                "topSellers": top_sellers,
                 "recentOrders": [format_order(o) for o in all_orders[:5]],
             },
             status=status.HTTP_200_OK,
@@ -210,6 +248,9 @@ class SellerProductListCreateView(APIView):
         category = str(data.get("category", "Hostel Essentials")).strip()
         featured_img, images = normalize_product_images(data.get("img"), data.get("images"))
         description = str(data.get("description", "")).strip()
+        condition = str(data.get("condition", "Brand New")).strip()
+        if condition not in ("Brand New", "Like New", "Gently Used"):
+            condition = "Brand New"
 
         try:
             raw_price = data.get("price", 0)
@@ -254,6 +295,7 @@ class SellerProductListCreateView(APIView):
             "category": category,
             "price": price,
             "stock": stock,
+            "condition": condition,
             "img": featured_img,
             "images": images,
             "description": description or f"Listed by {seller_profile.get('storeName', user.get('name'))}",
@@ -327,6 +369,10 @@ class SellerProductDetailView(APIView):
             update_fields["images"] = images
         if "description" in data:
             update_fields["description"] = str(data["description"]).strip()
+        if "condition" in data:
+            cond = str(data["condition"]).strip()
+            if cond in ("Brand New", "Like New", "Gently Used"):
+                update_fields["condition"] = cond
         if "inStock" in data:
             update_fields["inStock"] = bool(data["inStock"])
 

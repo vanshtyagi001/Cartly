@@ -95,6 +95,7 @@ def format_product(product):
         "img": featured_img,
         "images": images,
         "stock": stock,
+        "condition": product.get("condition", "Brand New"),
         "sellerId": product.get("sellerId"),
         "sellerName": product.get("sellerName", "Cartly Campus Hub"),
         "sellerLocation": product.get("sellerLocation", "Central Campus Store"),
