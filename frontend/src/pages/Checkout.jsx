@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 
@@ -7,6 +7,9 @@ export default function Checkout() {
   const { cartItems, clearCart } = useCart();
   const { user, token, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const buyNowItem = location.state?.buyNowItem || null;
+  const checkoutItems = buyNowItem ? [buyNowItem] : cartItems;
 
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
@@ -57,8 +60,8 @@ export default function Checkout() {
   const [submitError, setSubmitError] = useState('');
   const [placedOrder, setPlacedOrder] = useState(null);
 
-  // Safely calculate the cart total
-  const safeCartTotal = cartItems.reduce((total, item) => {
+  // Safely calculate the checkout total
+  const safeCartTotal = checkoutItems.reduce((total, item) => {
     const numericPrice = parseFloat(String(item.price).replace(/[^0-9.-]+/g, '')) || 0;
     return total + (numericPrice * item.quantity);
   }, 0);
@@ -102,7 +105,7 @@ export default function Checkout() {
       return;
     }
 
-    if (cartItems.length === 0) {
+    if (checkoutItems.length === 0) {
       setSubmitError('Your cart is empty.');
       return;
     }
@@ -126,7 +129,7 @@ export default function Checkout() {
       }
 
       const payload = {
-        items: cartItems.map(item => ({
+        items: checkoutItems.map(item => ({
           id: item.id,
           name: item.name,
           category: item.category,
@@ -159,8 +162,10 @@ export default function Checkout() {
         throw new Error(data.error || 'Failed to place order. Please try again.');
       }
 
-      // Success: clear cart and store placed order details
-      clearCart();
+      // Success: clear cart if not direct Buy Now, and store placed order details
+      if (!buyNowItem) {
+        clearCart();
+      }
       setPlacedOrder(data.order);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
@@ -275,7 +280,7 @@ export default function Checkout() {
   }
 
   // EMPTY CART VIEW
-  if (cartItems.length === 0) {
+  if (checkoutItems.length === 0) {
     return (
       <main className="flex-1 flex flex-col items-center justify-center py-32 bg-[#FAF9F6]">
         <div className="text-center max-w-lg w-full flex flex-col items-center">
@@ -632,11 +637,11 @@ export default function Checkout() {
           {/* Section 3: Item Review Table */}
           <section className="bg-white border border-stone-200 p-8 sm:p-10 shadow-sm">
             <h2 className="text-xl font-serif text-stone-900 tracking-tight pb-6 mb-6 border-b border-stone-200">
-              Review Cart Items ({cartItems.length})
+              {buyNowItem ? 'Direct Purchase Item' : `Review Cart Items (${checkoutItems.length})`}
             </h2>
 
             <div className="divide-y divide-stone-200">
-              {cartItems.map((item) => {
+              {checkoutItems.map((item) => {
                 const numericPrice = parseFloat(String(item.price).replace(/[^0-9.-]+/g, '')) || 0;
                 const rowTotal = numericPrice * item.quantity;
                 return (
@@ -671,7 +676,7 @@ export default function Checkout() {
             
             <div className="space-y-4 mb-8 text-sm font-sans tracking-wide text-stone-600">
               <div className="flex justify-between items-center">
-                <span>Subtotal ({cartItems.reduce((acc, i) => acc + i.quantity, 0)} items)</span>
+                <span>Subtotal ({checkoutItems.reduce((acc, i) => acc + i.quantity, 0)} items)</span>
                 <span className="text-stone-900">₹{safeCartTotal.toFixed(2)}</span>
               </div>
               <div className="flex justify-between items-center">

@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 
 export default function Product() {
   const { id } = useParams(); 
+  const navigate = useNavigate();
   const { user } = useAuth();
   const [quantity, setQuantity] = useState(1);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
@@ -108,6 +109,12 @@ export default function Product() {
     addToCart(product, quantity);
     setShowToast(true);
     setTimeout(() => { setShowToast(false); }, 3000);
+  };
+
+  const handleBuyNow = () => {
+    const stockCount = product.stock !== undefined ? product.stock : 25;
+    if (stockCount <= 0) return;
+    navigate('/checkout', { state: { buyNowItem: { ...product, quantity } } });
   };
 
   return (
@@ -288,17 +295,29 @@ export default function Product() {
             )}
 
             {/* Action Buttons */}
-            <div className="flex flex-col sm:flex-row gap-4 mt-auto">
+            <div className="space-y-3 mt-auto">
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                  type="button"
+                  onClick={handleBuyNow}
+                  disabled={(product.stock !== undefined ? product.stock : 25) <= 0}
+                  className="flex-1 bg-stone-900 text-white py-4 px-8 text-[10px] uppercase tracking-[0.2em] font-medium hover:bg-black transition-colors duration-300 disabled:opacity-40 disabled:hover:bg-stone-900"
+                >
+                  {(product.stock !== undefined ? product.stock : 25) > 0 ? 'Buy Now' : 'Out of Stock'}
+                </button>
+                <button 
+                  type="button"
+                  onClick={handleAddToCart}
+                  disabled={(product.stock !== undefined ? product.stock : 25) <= 0}
+                  className="flex-1 bg-white border border-stone-900 text-stone-900 py-4 px-8 text-[10px] uppercase tracking-[0.2em] font-medium hover:bg-stone-50 transition-colors duration-300 disabled:opacity-40 disabled:border-stone-300"
+                >
+                  Add to Cart
+                </button>
+              </div>
               <button 
-                onClick={handleAddToCart}
-                disabled={(product.stock !== undefined ? product.stock : 25) <= 0}
-                className="flex-1 bg-stone-900 text-white py-4 px-8 text-[10px] uppercase tracking-[0.2em] font-medium hover:bg-black transition-colors duration-300 disabled:opacity-40 disabled:hover:bg-stone-900"
-              >
-                {(product.stock !== undefined ? product.stock : 25) > 0 ? 'Add to Cart' : 'Out of Stock'}
-              </button>
-              <button 
+                type="button"
                 onClick={() => setIsCartOpen(true)}
-                className="flex-1 bg-transparent border border-stone-300 text-stone-900 py-4 px-8 text-[10px] uppercase tracking-[0.2em] font-medium hover:border-stone-900 transition-colors duration-300"
+                className="w-full bg-transparent border border-stone-300 text-stone-700 py-3.5 px-8 text-[10px] uppercase tracking-[0.2em] font-medium hover:border-stone-900 hover:text-stone-900 transition-colors duration-300"
               >
                 View Cart
               </button>
