@@ -137,8 +137,10 @@ export default function Product() {
                   <button
                     key={`${imgUrl.slice(0, 24)}-${idx}`}
                     type="button"
+                    onMouseEnter={() => setSelectedImageIndex(idx)}
+                    onFocus={() => setSelectedImageIndex(idx)}
                     onClick={() => setSelectedImageIndex(idx)}
-                    className={`w-16 h-16 sm:w-20 sm:h-20 shrink-0 bg-[#FAF9F6] border overflow-hidden transition-all ${
+                    className={`w-16 h-16 sm:w-20 sm:h-20 shrink-0 bg-[#FAF9F6] border overflow-hidden transition-all cursor-pointer ${
                       selectedImageIndex === idx
                         ? 'border-stone-900 ring-1 ring-stone-900 opacity-100'
                         : 'border-stone-200 opacity-65 hover:opacity-100 hover:border-stone-400'
