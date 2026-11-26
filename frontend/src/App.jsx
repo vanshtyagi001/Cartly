@@ -1,5 +1,5 @@
-import React, { Suspense, lazy } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import React, { Suspense, lazy, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import { WishlistProvider } from './context/WishlistContext';
@@ -21,6 +21,14 @@ const Support = lazy(() => import('./pages/Support'));
 const Store = lazy(() => import('./pages/Store'));
 const Wishlist = lazy(() => import('./pages/Wishlist'));
 
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
+}
+
 function RouteLoader() {
   return (
     <main className="flex-1 flex flex-col items-center justify-center py-32 bg-[#FAF9F6] border-t border-stone-200 w-full min-h-[calc(100vh-88px)]">
@@ -36,6 +44,7 @@ export default function App() {
       <WishlistProvider>
         <CartProvider>
           <Router>
+          <ScrollToTop />
           <div className="min-h-screen w-full flex flex-col bg-white relative">
             <Navbar />
             
