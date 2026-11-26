@@ -502,9 +502,21 @@ export default function Product() {
                         Your Rating
                       </span>
                       {reviewRating > 0 && (
-                        <span className="text-[10px] font-mono text-stone-700">
-                          {reviewRating} / 5
-                        </span>
+                        <div className="flex items-center gap-3">
+                          <span className="text-[10px] font-mono text-stone-700">
+                            {reviewRating} / 5
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setReviewRating(0);
+                              setHoverRating(0);
+                            }}
+                            className="text-[10px] uppercase tracking-widest text-stone-400 hover:text-stone-900 underline transition-colors"
+                          >
+                            Clear
+                          </button>
+                        </div>
                       )}
                     </div>
                     <div
@@ -519,7 +531,7 @@ export default function Product() {
                             type="button"
                             onMouseEnter={() => setHoverRating(star)}
                             onClick={() => {
-                              setReviewRating(star);
+                              setReviewRating((prev) => (prev === star ? 0 : star));
                               if (reviewError) setReviewError('');
                             }}
                             className={`w-9 h-9 border text-sm transition-colors cursor-pointer ${
