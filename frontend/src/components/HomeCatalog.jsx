@@ -315,16 +315,6 @@ export default function HomeCatalog() {
                         className="w-full h-full object-cover mix-blend-multiply group-hover:scale-105 transition-transform duration-700"
                       />
 
-                      <span
-                        className={`absolute top-3 right-3 text-[9px] uppercase tracking-wider font-semibold px-2 py-0.5 border ${
-                          isAvailable
-                            ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                            : 'bg-red-50 text-red-800 border-red-200'
-                        }`}
-                      >
-                        {isAvailable ? 'In Stock' : 'Sold Out'}
-                      </span>
-
                       {isAvailable && (
                         <button
                           type="button"

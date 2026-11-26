@@ -1,13 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
+import { useAuth } from '../context/AuthContext';
 
 export default function Product() {
   const { id } = useParams(); 
+  const { user } = useAuth();
   const [quantity, setQuantity] = useState(1);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [showToast, setShowToast] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [notifyEmail, setNotifyEmail] = useState(user?.email || '');
+  const [notifySubmitted, setNotifySubmitted] = useState(false);
   
   // State for fetching the specific product and suggested items from the backend
   const [product, setProduct] = useState(null);
@@ -21,6 +25,8 @@ export default function Product() {
     setIsLoading(true);
     setQuantity(1);
     setSelectedImageIndex(0);
+    setNotifySubmitted(false);
+    if (user?.email) setNotifyEmail(user.email);
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
     fetch(`${import.meta.env.VITE_API_URL}/api/products`)
@@ -187,7 +193,7 @@ export default function Product() {
                 }`}>
                   {(product.stock !== undefined ? product.stock : 25) > 0
                     ? `${product.stock !== undefined ? product.stock : 25} in stock`
-                    : 'Sold Out'}
+                    : 'Out of Stock'}
                 </span>
               </div>
               <div>
@@ -229,8 +235,55 @@ export default function Product() {
                 </div>
               </div>
             ) : (
-              <div className="mb-12 p-4 bg-stone-100 border border-stone-200 text-stone-600 text-xs font-serif italic max-w-md">
-                This item is currently out of stock. Check back soon or contact the campus seller.
+              <div className="mb-10 p-6 bg-[#FAF9F6] border border-stone-200 max-w-md space-y-4">
+                <div>
+                  <span className="text-[10px] uppercase tracking-[0.2em] font-semibold text-red-700 block mb-1">
+                    Currently Out of Stock
+                  </span>
+                  <p className="text-stone-600 text-xs leading-relaxed">
+                    This item is temporarily unavailable. Leave your email below and we will notify you as soon as the campus seller restocks it.
+                  </p>
+                </div>
+
+                {notifySubmitted ? (
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2">
+                    <span>✓</span>
+                    <span>
+                      We&apos;ll notify <strong>{notifyEmail}</strong> as soon as <strong>{product.name}</strong> is back in stock.
+                    </span>
+                  </div>
+                ) : (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (!notifyEmail.trim()) return;
+                      try {
+                        const existing = JSON.parse(localStorage.getItem('cartly_stock_alerts') || '{}');
+                        existing[product.id] = notifyEmail.trim();
+                        localStorage.setItem('cartly_stock_alerts', JSON.stringify(existing));
+                      } catch {
+                        // ignore storage errors
+                      }
+                      setNotifySubmitted(true);
+                    }}
+                    className="flex flex-col sm:flex-row gap-2"
+                  >
+                    <input
+                      type="email"
+                      required
+                      value={notifyEmail}
+                      onChange={(e) => setNotifyEmail(e.target.value)}
+                      placeholder="you@campus.edu"
+                      className="flex-1 bg-white border border-stone-300 px-3.5 py-2.5 text-xs text-stone-900 focus:border-stone-900 focus:outline-none"
+                    />
+                    <button
+                      type="submit"
+                      className="bg-stone-900 text-white text-[10px] uppercase tracking-[0.15em] font-medium px-5 py-2.5 hover:bg-black transition-colors shrink-0"
+                    >
+                      Notify Me
+                    </button>
+                  </form>
+                )}
               </div>
             )}
 
