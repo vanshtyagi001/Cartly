@@ -213,10 +213,35 @@ def _build_reviews_summary(product_id):
     }
 
 
+def _has_user_purchased(user, product_id):
+    if not user:
+        return False
+    user_id = str(user.get("_id", ""))
+    user_email = str(user.get("email", "")).strip().lower()
+    identity_filters = []
+    if user_id:
+        identity_filters.append({"userId": user_id})
+    if user_email:
+        identity_filters.append({"userEmail": user_email})
+    if not identity_filters:
+        return False
+    orders_col = get_orders_collection()
+    return bool(
+        orders_col.find_one({
+            "$or": identity_filters,
+            "status": {"$ne": "Cancelled"},
+            "items.id": product_id,
+        })
+    )
+
+
 class ProductReviewsView(APIView):
     def get(self, request, product_id):
         try:
-            return Response(_build_reviews_summary(product_id))
+            user = get_user_from_request(request)
+            summary = _build_reviews_summary(product_id)
+            summary["canReview"] = _has_user_purchased(user, product_id)
+            return Response(summary)
         except Exception as error:
             return Response({"error": str(error)}, status=500)
 
@@ -224,6 +249,12 @@ class ProductReviewsView(APIView):
         user = get_user_from_request(request)
         if not user:
             return Response({"error": "Please sign in to leave a review."}, status=401)
+
+        if not _has_user_purchased(user, product_id):
+            return Response(
+                {"error": "Only verified buyers who have purchased this product can leave a review."},
+                status=403,
+            )
 
         data = request.data or {}
         try:
@@ -238,13 +269,6 @@ class ProductReviewsView(APIView):
             return Response({"error": "Please write a brief review comment."}, status=400)
 
         user_id = str(user["_id"])
-        orders_col = get_orders_collection()
-        has_ordered = orders_col.find_one({
-            "userId": user_id,
-            "status": {"$ne": "Cancelled"},
-            "items.id": product_id,
-        })
-
         now = datetime.now(timezone.utc)
         reviews_col = get_reviews_collection()
         reviews_col.update_one(
@@ -256,7 +280,7 @@ class ProductReviewsView(APIView):
                     "userName": user.get("name", "Campus Student"),
                     "rating": rating,
                     "comment": comment,
-                    "verifiedPurchase": bool(has_ordered),
+                    "verifiedPurchase": True,
                     "updatedAt": now,
                 },
                 "$setOnInsert": {"createdAt": now},
@@ -265,8 +289,25 @@ class ProductReviewsView(APIView):
         )
 
         summary = _build_reviews_summary(product_id)
+        summary["canReview"] = True
         summary["message"] = "Thank you! Your review has been published."
         return Response(summary, status=201)
+
+    def delete(self, request, product_id):
+        user = get_user_from_request(request)
+        if not user:
+            return Response({"error": "Please sign in to manage your review."}, status=401)
+
+        user_id = str(user["_id"])
+        reviews_col = get_reviews_collection()
+        result = reviews_col.delete_one({"productId": product_id, "userId": user_id})
+        if result.deleted_count == 0:
+            return Response({"error": "Review not found."}, status=404)
+
+        summary = _build_reviews_summary(product_id)
+        summary["canReview"] = _has_user_purchased(user, product_id)
+        summary["message"] = "Your review has been deleted."
+        return Response(summary)
 
 
 class ProductStockAlertView(APIView):

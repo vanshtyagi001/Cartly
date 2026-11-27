@@ -26,7 +26,9 @@ export default function Product() {
     totalReviews: 0,
     distribution: { '5': 0, '4': 0, '3': 0, '2': 0, '1': 0 },
     reviews: [],
+    canReview: false,
   });
+  const [deletingReview, setDeletingReview] = useState(false);
   const [reviewRating, setReviewRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
   const [reviewComment, setReviewComment] = useState('');
@@ -63,7 +65,9 @@ export default function Product() {
         if (!res.ok) throw new Error('Product not found');
         return res.json();
       }),
-      fetch(`${apiUrl}/api/products/${id}/reviews`)
+      fetch(`${apiUrl}/api/products/${id}/reviews`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
         .then((res) => (res.ok ? res.json() : null))
         .catch(() => null),
       fetch(`${apiUrl}/api/products/${id}/questions`)
@@ -97,6 +101,7 @@ export default function Product() {
             totalReviews: revData.totalReviews || 0,
             distribution: revData.distribution || { '5': 0, '4': 0, '3': 0, '2': 0, '1': 0 },
             reviews: Array.isArray(revData.reviews) ? revData.reviews : [],
+            canReview: Boolean(revData.canReview),
           });
         }
         if (qData && Array.isArray(qData.questions)) {
@@ -112,7 +117,7 @@ export default function Product() {
         setSuggestions([]);
         setIsLoading(false);
       });
-  }, [id]);
+  }, [id, token]);
 
   const handleReviewSubmit = async (e) => {
     e.preventDefault();
@@ -151,6 +156,7 @@ export default function Product() {
         totalReviews: data.totalReviews || 0,
         distribution: data.distribution || { '5': 0, '4': 0, '3': 0, '2': 0, '1': 0 },
         reviews: Array.isArray(data.reviews) ? data.reviews : [],
+        canReview: Boolean(data.canReview),
       });
       setReviewComment('');
       setReviewRating(0);
@@ -160,6 +166,38 @@ export default function Product() {
       setReviewError(err.message || 'Could not submit review.');
     } finally {
       setIsSubmittingReview(false);
+    }
+  };
+
+  const handleDeleteReview = async () => {
+    if (!token) return;
+    setReviewError('');
+    setReviewFeedback('');
+    setDeletingReview(true);
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    try {
+      const res = await fetch(`${apiUrl}/api/products/${id}/reviews`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to delete review.');
+      }
+      setReviewSummary({
+        averageRating: data.averageRating || 0,
+        totalReviews: data.totalReviews || 0,
+        distribution: data.distribution || { '5': 0, '4': 0, '3': 0, '2': 0, '1': 0 },
+        reviews: Array.isArray(data.reviews) ? data.reviews : [],
+        canReview: Boolean(data.canReview),
+      });
+      setReviewFeedback(data.message || 'Your review has been deleted.');
+    } catch (err) {
+      setReviewError(err.message || 'Could not delete review.');
+    } finally {
+      setDeletingReview(false);
     }
   };
 
@@ -566,6 +604,21 @@ export default function Product() {
                     Sign In to Review
                   </Link>
                 </div>
+              ) : !reviewSummary.canReview ? (
+                <div className="space-y-4">
+                  <div className="px-3 py-2.5 bg-amber-50/70 border border-amber-200 text-amber-900 text-xs leading-relaxed">
+                    <span className="font-semibold block uppercase tracking-wider text-[10px] mb-1">
+                      Verified Purchase Required
+                    </span>
+                    Only students who have purchased this item can rate and review it.
+                  </div>
+                  <Link
+                    to="/orders"
+                    className="inline-block w-full text-center border border-stone-300 text-stone-700 text-[10px] uppercase tracking-[0.2em] font-medium py-3 hover:border-stone-900 hover:text-stone-900 transition-colors"
+                  >
+                    View Your Orders
+                  </Link>
+                </div>
               ) : (
                 <form onSubmit={handleReviewSubmit} className="space-y-4">
                   <div>
@@ -683,7 +736,19 @@ export default function Product() {
                           </span>
                         )}
                       </div>
-                      <span className="text-[11px] text-stone-400">{rev.date}</span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-[11px] text-stone-400">{rev.date}</span>
+                        {isAuthenticated && user?.id === rev.userId && (
+                          <button
+                            type="button"
+                            onClick={handleDeleteReview}
+                            disabled={deletingReview}
+                            className="text-[10px] uppercase tracking-widest text-rose-700 hover:text-rose-900 underline underline-offset-4 disabled:opacity-50"
+                          >
+                            {deletingReview ? 'Deleting...' : 'Delete'}
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     <div className="text-xs tracking-widest text-stone-900">
