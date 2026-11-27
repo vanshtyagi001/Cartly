@@ -3,6 +3,8 @@ import re
 from bson import ObjectId
 from django.contrib.auth.hashers import check_password, make_password
 from django.core.signing import BadSignature, SignatureExpired, TimestampSigner
+from rest_framework import exceptions
+from rest_framework.authentication import BaseAuthentication, CSRFCheck
 
 from .repository import get_users_collection
 
@@ -95,4 +97,17 @@ def get_user_from_request(request) -> dict | None:
     try:
         return get_users_collection().find_one({"_id": ObjectId(user_id)})
     except Exception:
+        return None
+
+
+class CsrfEnforcingAuthentication(BaseAuthentication):
+    """Enforce Django CSRF checks on unsafe API requests even with Bearer auth."""
+
+    def authenticate(self, request):
+        django_request = request._request
+        check = CSRFCheck(lambda req: None)
+        check.process_request(django_request)
+        reason = check.process_view(django_request, None, (), {})
+        if reason:
+            raise exceptions.PermissionDenied(f"CSRF Failed: {reason}")
         return None

@@ -1,5 +1,8 @@
 from datetime import datetime, timezone
 from bson import ObjectId
+from django.middleware.csrf import get_token
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -15,6 +18,12 @@ from .auth import (
     verify_password,
 )
 from .repository import get_users_collection
+
+
+@method_decorator(ensure_csrf_cookie, name="dispatch")
+class CsrfTokenView(APIView):
+    def get(self, request):
+        return Response({"csrfToken": get_token(request)})
 
 
 class RegisterView(APIView):
